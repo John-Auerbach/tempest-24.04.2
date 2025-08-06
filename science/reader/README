@@ -1,0 +1,392 @@
+The reader library.
+-------------------
+
+The reader library defines extended forms of the objects that "reside"
+in three-dimensional space, and were defined in the solid and beam
+libraries. It also defines one more object, a camera, and provides
+several facilities for grouping similar objects together. Finally, it
+provides a file interface to the new objects. In other words, it
+defines a file format and implements functions that, given a file of
+the appropriate format, they can read that file and return the object
+described in it.
+
+
+Extending vertices.
+-------------------
+
+An extended form of a shared vertex is defined as follows.
+
+typedef struct {
+  int  ID;        /* Vertex ID, specified in input file. */
+  void *UserData; /* User handle to additional vertex data. */
+} VertexExt;  
+
+This form allows each vertex to be associated not only with some
+coordinate in space, but also with a single user ID. This field can be
+operated on by the user at will. Moreover, the usual UserData field is
+defined as the user-managed hook.
+
+An extended vertex, like any other extended form, is closely tied to
+the basis form, i.e. the Vertex structure of the solid library, in
+this case. An extended vertex *V is declared as
+
+Vertex *V;
+
+This declaration is the same as the basic vertex declaration!  The
+reason is that an extended vertex pointer V points to a Vertex
+structure VStr. This Vertex structure in turn has a VertexExt
+structure VExtStr hanging from the UserData field of VStr. Hence, the
+UserData field of VStr becomes system-managed. To make up for the
+loss, the VertexExt structure defines a UserData field... Read this
+paragraph again, carefully, until you understand it - a diagram would
+be helpful. Keep in mind that an "extended vertex" is an abstract
+entity with two components, a Vertex and a VertexExt structure. A
+"basic vertex" entity has simply one component, a Vertex structure.
+
+Quick access to the VertexExt component of an extended vertex *V can
+be obtained through the VERTEX_EXT() macro, which returns a pointer to
+the VertexExt structure of *V. Of course, access to the basic Vertex
+structure is available directly through V, a Vertex structure pointer
+itself.
+
+Moreover, if there is a basic vertex that we want to extend, and turn
+into an extended vertex, all we need is to call VSExt_Extend(). This
+routine simply hangs a VertexExt structure from the basic Vertex
+structure. Therefore V originally points to a basic vertex, but after
+the call it points to an extended vertex. Note that FAILURE might be
+returned in the case of a rare memory allocation failure.
+
+RETCODE VSExt_Extend(Vertex *V)
+
+Extended vertex spaces are identical to basic vertex spaces. The only
+difference is that we now associate an ID with each shared vertex. To
+manage this altered form of vertex spaces, we provide two routines,
+VSExt_Add() and VSExt_Cleanup() which replace their analogues VS_Add()
+and VS_Cleanup() when extended vertices are used. Note that VS_Copy()
+and VS_Remove() can be used on both basic and extended vertices.
+
+Vertex *VSExt_Add(Vertex **VS,Cartesian *V);
+void VSExt_Cleanup(Vertex **VS);
+
+
+Extending surfaces and bodies.
+------------------------------
+
+Now that the basis idea behind objet extension has been described, it
+is easy to describe concisely the extended forms of other objects.
+
+An extended surface is a surface with an ID (ID), a name (stored as
+the shared string *Location), and a body *B on which it lies.  Basic
+surfaces were grouped into basic bodies via surface lists.  However,
+just by looking at a basic surface, we could not tell to which body it
+belonged (if any). Extended surfaces, on the other hand, provide for a
+back-pointer to their containing body *B. If the surface is
+independent, this field may be set to NULL, of course.
+
+The user is responsible for the management of all these new fields, as
+well as the UserData field.  However, as in the case of extended
+vertices, the Surface structure UserData field now becomes system
+managed when extended surfaces are used.
+
+typedef struct {
+  int          ID;        /* User-defined surface ID. */
+  SharedString *Location; /* User-supplied surface location/description. */
+  Body         *B;        /* Pointer to body, owner of surface. */
+  void         *UserData; /* User handle to additional surface data. */
+} SurfaceExt;
+
+Just as new vertex space management routines has to be written for
+extended vertices, so did we have to implement new routines for
+extended surface list management. Here they are:
+
+Surface *SuExt_Create(Surface **SL);
+void SuExt_Free(Surface *S);
+void SuExt_FreeList(Surface *SL);
+
+Finally, basic surfaces are extended by SuExt_Extend(). Access to the
+SurfaceExt component of the extended surface is obtained via the macro
+SURFACE_EXT(), which is must be given a pointer to the extended
+surface (i.e. a Surface structure pointer).
+
+RETCODE SuExt_Extend(Surface *);
+
+Extended bodies must seem a triviality by now. The new fields, Name,
+Description, EdgeColorName, InteriorColorName, and UserData can be
+used at the user's discretion.
+
+typedef struct {
+  char Name[11];              /* User specification. */
+  char Description[61];
+  char EdgeColorName[21];
+  char InteriorColorName[21];
+  void *UserData;             /* User handle to additional body data. */
+} BodyExt;
+
+The new list management functions are
+
+Body *BdExt_Create(Body **BL);
+void BdExt_Free(Body *B);
+void BdExt_FreeList(Body *BL);
+
+Extension of a basic body is the function of BdExt_Extend() while
+BODY_EXT() is the access macro for the BodyExt component of an
+extended body.
+
+RETCODE BdExt_Extend(Body *);
+
+
+Extending generators.
+---------------------
+
+There is nothing new for extended generators either. The new fields
+become evident by glancing at the GeneratorExt structure.
+
+typedef struct {
+  char Name[11];              /* User specification. */
+  char Description[61];
+  char Mission[11];
+  char ImpactColorName[21];
+  char NoImpactColorName[21];
+  void *UserData;             /* User handle to additional generator data. */
+} GeneratorExt;
+
+The new list management functions are
+
+Generator *GnExt_Create(Generator **GL);
+void GnExt_Free(Generator *G);
+void GnExt_FreeList(Generator *GL);
+
+While there is no extension routine, there is an accessor macro for
+the GeneratorExt portion of an extended generator.  Naturally, it is
+called GENERATOR_EXT().
+
+
+Cameras.
+--------
+
+Cameras are new objects. They have a name (Name), and a view
+specification. A view specification consists of a point, Origin,
+together with a vector, Loc.  Origin is the point the camera is
+looking at, i.e. the point whose image appears in the center of view.
+Loc is the location of the camera, RELATIVE to Origin. These fields,
+as well as UserData, can be used by the user at his/her discretion.
+
+typedef struct _Camera { /* Camera (set of view system settings). */
+  char      Name[11];    /* User specification. */
+  Cartesian Origin;      /* Origin of view system. */
+  Spherical Loc;         /* View point location relative to Origin. */
+
+  struct _Camera *Nxt;
+
+  /* User handle to additional camera data. */
+
+  void *UserData;
+} Camera;
+
+The Nxt field, however, is reserved for the management of linked lists
+of cameras. List management for cameras is identical to list
+management for all other objects. The routines names are
+
+Camera *Cm_Create(Camera **CL);
+void Cm_Free(Camera *C);
+void Cm_FreeList(Camera *CL);
+
+where CL is a camera list, and *C is a camera.
+
+
+File interface.
+---------------
+
+Three very helpful routines are provided for reading cameras, extended
+generators and extended bodies from a file. The file formats for each
+object are defined in the next three sections. First, however, we will
+describe the three functions that implement the file interface.
+
+Camera *Read_Camera(char *FileName,Camera **CL);
+Generator *Read_Generator(char *FileName,Generator **GL);
+Body *Read_Body(char *FileName,Body **BL,Vertex **VS,SharedString **SS);
+
+All three functions take the name of the file containing the object
+description as their first argument, FileName. Moreover, they return a
+pointer to the new object upon successful termination; otherwise, they
+return NULL. Possible errors include file access and format errors,
+and memory allocation failure. Also, the interface routines add the
+new object in a list of objects; this is the role of the second
+argument.
+
+Read_Body() is a bit different than the other routines. The reason is
+that an extended body description contains a lot of extended vertices
+for the (extended) body (extended) surfaces, as well as a lot of
+names, one for each extended surface. Therefore, for storage
+efficiency, we keep these vertices and names in shared spaces. *VS and
+*SS define the spaces that should be used to store the retrieved
+information.
+
+
+Body files (extension ".ply"):
+------------------------------
+
+A body is a set of non-degenerate planar surfaces with convex
+polygonal boundaries. A body is identified by its unique name (Name -
+10 characters); other information associated with a body are its
+description (Description - 60 characters), the color of its wire frame
+(EdgeColorName - 20 characters) and the primary color of its
+holographic representation (InteriorColorName - 20 characters).
+Accordingly, a file containing a body description must contain the
+following header lines:
+
+Name(10):        <Name>
+Description(60): <Description>
+Color(20):       <Wire frame color>
+Solid_Color(20): <Solid color>
+
+No spaces should be present within a field; words should be separated,
+instead, by underscores. When the system reads the body data file, the
+underscores are translated into spaces. For example, the following is
+a valid header:
+
+Name(10):        TSS_PL
+Description(60): Tethered_Satellite_System_1_Payload
+Color(20):       blue
+Solid_Color(20): blue
+
+Those header lines should be followed by an empty line, and then the
+surfaces of the body. The coordinates of the vertices of all the
+polygons are specified first. Each vertex description occupies a
+single line and has the format
+
+[VERTEX V<vertex ID> <x coordinate> <y coordinate> <z coordinate>]
+
+For example, the point (1,3,4.3) is named V8 by the following line:
+
+[VERTEX V8 1.0 3.0 4.3]
+
+The vertex number (ID) should be a non-negative integer, unique within
+the file. The coordinates should be real numbers.
+
+The surface descriptions begin immediately after the last vertex
+description. Each surface is identified by a sequence of vertices
+forming its polygonal boundary. The vertices of each polygon should be
+given in clockwise or anti-clockwise order.
+
+[POLYGON P<polygon ID> V<vertex ID> V<vertex ID> V<vertex ID> ...]
+
+The polygon (or surface) ID can be any integer; uniqueness on the
+polygon IDs is not enforced. At least three vertices must be specified
+for each polygon. e.g.
+
+[POLYGON P16 V29 V27 V28]
+[POLYGON P16 V29 V27 V28 V30 V87]
+
+Immediately after a polygon description, there can be a line of the
+following form:
+
+[LOCATION <Location> ]
+
+<Location> is an arbitrary string shorter than 100 characters, which
+should not contain any spaces; words should be separated, instead, by
+underscores. This string is intended to identify the location of the
+surface within the body, e.g.
+
+[LOCATION Front_Section_Of_Nose ]
+
+More information on body description files, including several utility
+programs designed to operate on such files, can be found in
+"~sets/beam/codeV5/bodycheck/". Moreover, examples of body files are
+available in "~sets/beam/data/tss/bodies".
+
+
+Generator files (extension ".gen"):
+-----------------------------------
+
+A generator is a point in space from which electrons emerge, in a
+specified direction, after being accelerated by an electrostatic field
+of specified potential difference. The corresponding fields of a basic
+generator (Generator structure) were introduced in the beam library.
+
+A generator is identified by its unique name (Name - 10 characters);
+other information associated with a generator are its description
+(Description - 60 characters), and mission information (Mission - 10
+characters), the color of the electron beam when this beam hits a body
+(ImpactColorName - 20 characters) and the electron beam color when the
+beam escapes into outer space (NoImpactColorName - 20 characters).
+Accordingly, a file containing a generator description consists of the
+following lines:
+
+Name(10):            <Name>
+Description(60):     <Description>
+Mission(10):         <Mission name>
+Coelevation(deg):    <Initial direction of electron beam - co-elevation angle>
+Azimuth(deg):        <Initial direction of electron beam - azimuth angle>
+Location(m):         <x coordinate> <y coordinate> <z coordinate>
+Potential(V):        <Electron accelerating potential>
+Impact_Color(20):    <Beam color when the beam hits a body>
+No_Impact_Color(20): <Beam color when the beam escapes all bodies>
+
+(The "Location" line defines the coordinates of the electron emergence
+point.) As in the body files, no spaces should be present within a
+field; instead, underscores should be used as word separators. All the
+numerical entries are real numbers. The accelerating potential must be
+positive. A valid generator description is the following:
+
+Name(10):            FPEG_TSS-1
+Description(60):     Fast_Pulse_Electron_Generator
+Mission(10):         TSS-1
+Coelevation(deg):    66.4
+Azimuth(deg):        90.0
+Location(m):         9.45 0.127 1.15
+Potential(V):        1000.0
+Impact_Color(20):    red
+No_Impact_Color(20): blue
+
+Examples of generator files are available in "~sets/beam/data/tss/generators".
+
+
+Camera files (extension ".cam"):
+--------------------------------
+
+A camera is a specification of viewing parameters. In particular, it
+consists of a view system's origin (Origin) and view point coordinates
+(Loc) relative to the origin:
+
+Name(10):             <Name>
+Origin_Location(m):   <x coordinate> <y coordinate> <z coordinate>
+Eye_Coelevation(deg): <View point location - co-elevation>
+Eye_Azimuth(deg):     <View point location - azimuth>
+Eye_Distance(m):      <View point location - distance from origin>
+
+As in the body files, no spaces should be present within the Name
+field; instead, underscores should be used as word separators. All the
+numerical entries are real numbers. The eye (view point) distance must
+be at least 0.1. A valid camera description is the following:
+
+Name(10):             CAM_Test
+Origin_Location(m):   0.0 0.0 0.4
+Eye_Coelevation(deg): 90.0
+Eye_Azimuth(deg):     -180.0
+Eye_Distance(m):      10.0
+
+Examples of camera files are available in "~sets/beam/data/shuttle/cameras/".
+
+
+Using the library.
+------------------
+
+An application that uses any of the routines or macros defined above
+must include the proper function declarations and type definitions
+defined in "reader.h". This file, in turn, assumes that it has access
+to some items defined in other files. It follows that the lines
+
+#include <math.h>
+#include "advmath.h"
+#include "solid.h"
+#include "beam.h"
+#include "strsp.h"
+#include "reader.h"
+
+must appear before any function documented here is called.
+
+The compiled application should link with the reader library
+(containing the implementation of the functions described above), as
+well as some other libraries. It suffices to link with "-lreader
+-lbeam -lsolid -lam -lstrsp -lm" as linker options.

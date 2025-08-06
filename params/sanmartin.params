@@ -1,0 +1,155 @@
+# Sanmartin Parameters
+#   This configuration of TeMPEST was used to reproduce some of Fig. 2 in the article,
+#   "Efficiency of Electrodynamic Tether Thrusters"
+#   Sanmartin, Estes, Lorenzini, and Elaska
+#   2006
+#
+# This is a BOOST-mode simulation (downward deploy)
+#	ideal contactors are modeled (V=IR with very small R)
+#	50 watts of constant power
+#	partial bare/insulated tether
+
+
+#### SYSTEM PROPERTIES ####
+System_Mass	= 500 	# kg
+
+#### EPOCH PARAMETERS ####
+Ephemeris_Year	= 2000
+Ephemeris_Time	= 001/00:00:00
+#Circular_Alt    = 600000
+Inclination	= 60.0
+RAAN		= 0.0	# also longitude of ascending node
+Arg_Perigee	= 0.0	# also agrument of periapsis
+Anomaly_Type	= True
+#True_Anomaly	= 0.0
+
+#### eccentricity #####
+# A = a(1+e)	e=A/a-1	A=apogee, a=semimajor axis
+# P = a(1-e)	e=P/a+1
+# tempest input for A and P should subtract the Re (don't know why but it is how it is defined)
+
+APOGEE_ALT	= 6.348906815e5	# Apogee  altitude above mean earth radius (m) - Re
+PERIGEE_ALT	= 5.651093185e5	# Perigee altitude above mean earth radius (m) - Re
+
+######### SSimulation Parameters #######
+Orbit_Perturb	= no 	# GENORBIT, include Sun, Moon, and Oblateness
+Orbit_Decay		= no
+Orbit_Precise   = Yes
+Ephem_From_RV	= Yes	# use postition and velocity to get ephemeris (orbital elements)
+
+######## NO libration (EMFgg = EMFlib) #####
+InPlane_Lib     =   0.00
+OutofPlane_Lib  =   0.00
+Radial_Lib      =   0.00
+IP_Phase	=   0.00
+OP_Phase	=   0.00
+Rad_Phase	=   0.00
+
+######## Simulation Start & Stop Time #####
+Start_Year	= 2000
+Start_Time	= 001/00:00:00.000
+Stop_Year	= 2000
+Stop_Time	= 012/00:00:00.000
+######## MET0 Time = Launch time #####
+MET0_Year	= 2000
+MET0_Time	= 001/00:00:00.00
+
+###################################################################
+# Increment by 10 seconds
+#
+Time_Incr	= 000/00:01:00.000
+SS_Output	= 10
+
+###################################################################
+# Set tether length negative 'downward deployed'  (BOOST MODE)
+# spacecraft is position=zero. Up is positive. Dn is negative
+
+Tether_End      = -10000.0
+Bare_Start		=  -4000.0	
+Bare_End		= -10000.0
+T_Resistivity	= 0.00000282008   # ohms * cm (Aluminum)
+T_Cond_Radius	= 0.002     	  # meters (2 mm = 0.002 m)
+#-------------------------------------------------------------
+#I_EMISSIVITY	= 0.06 # I for "insulated". Use different variable for bare
+#I_ABSORBTIVITY  = 0.50
+B_EMISSIVITY	= 0.06 # B for "bare"
+B_ABSORBTIVITY  = 0.50
+
+Bare_Segments	= 100
+
+Bare_Load	= 0	# Ohms
+
+############# Upper Contactor ###################################
+# 		CATHODE for downward deploy and BOOST mode
+#
+# Ohms Law (Model 4) --> V=P1*I^P2 + P3
+#	P1=R, P2=power of 1, P3=0 (constant)
+#	Use P1=small number for ideal contactor (e.g, 0.000001)
+
+Contactor_UP	= 4
+
+Contactor_P1_Up	= 0.0000001
+Contactor_P2_Up	= 1
+Contactor_P3_Up	= 0		# cathode voltage drop
+
+# Initial Guess for Cathode Bias (still need this to solve)
+# "bare_cathode_bias" in Tempest
+Cathode_Bias	= -1000
+
+############# Downward Contactor ################################
+# 		ANODE for downward deploy and BOOST mode
+# Using Contactor 4 as mathematical model for: V=IR
+#   V=P1*(i)^P2 + P3
+
+Contactor_Down  = 4
+
+Contactor_P1_Dn = 0.0000001 # (resistor)
+Contactor_P2_Dn = 1 # (power of one for V=IR)
+Contactor_P3_Dn = 0 # (anode voltage drop)
+
+# Initial guess for Anode Bias
+Anode_Bias	= 1000.0
+
+##################################################################
+Thrust_Control	= 2 	# 0=?, 1=EMFx2, 2=contstant power
+THRUST_POWER	= 50	# [watts] #TEMPEST --> "bare_down_power"
+Thrust_Voltage	= 5000	# [volts] #TEMPEST --> "bare_down_voltage"
+# you must set voltage to some value
+# Tempest uses the smaller values of 
+#	the solved voltage
+#	thrust voltage
+# so if you leave it at 0, it will be zero always.
+
+##################################################################
+###################################################################
+# List out outputs (NOT case sensitive)
+
+Show_Vars	= MET_DAYS
+Show_Vars	= i_bare_end
+#---POSITION---
+Show_Vars	= Rx_ECI
+Show_Vars	= Ry_ECI
+Show_Vars	= Rz_ECI
+#---Velocity---
+Show_Vars	= Vx_ECI
+Show_Vars	= Vy_ECI
+Show_Vars	= Vz_ECI
+#---ORBITAL ---
+Show_Vars	= eccentricity
+Show_Vars	= inclination
+Show_Vars	= SEMI_MAJ_AXIS
+Show_Vars	= ARG_PERIGEE
+Show_Vars	= RAAN
+Show_Vars	= TRUE_ANOMALY
+#---ENVIRONMENTAL ---
+Show_Vars	= ELECT_DENSITY
+Show_Vars	= MASS_DENSITY
+Show_Vars	= O_DENSITY
+Show_Vars	= Bx_ECI
+Show_Vars	= By_ECI
+Show_Vars	= Bz_ECI
+#---TETHER ---
+Show_Vars	= I_BARE_AVE
+Show_Vars	= EMF_INDUCED # this is the dot product along the tether
+Show_Vars	= V_ANODE
+Show_Vars	= V_CATHODE

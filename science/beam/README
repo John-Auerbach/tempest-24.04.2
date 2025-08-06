@@ -1,0 +1,352 @@
+The beam library.
+-----------------
+
+The beam library contains functions for tracing and rendering electron
+beam emissions in space. It also contains facilities for defining
+lists of electron beam generators.
+
+We only use mks, i.e. metric (meters, kilograms, seconds, radians,
+Tesla, etc), units of measurement.
+
+
+Electron generators.
+--------------------
+
+An electron generator is stored as a collection of its defining
+properties, augmented by features of the electron beam it emits.
+
+typedef enum {LINEAR,CIRCULAR,HELICAL} BEAM_SHAPE;
+
+typedef struct _Generator {
+  double    Coelevation,Azimuth; /* In radians. */
+  Cartesian Loc;                 /* In meters. */
+  double    Potential;           /* In Volts. */
+
+  BEAM_SHAPE BeamType;       /* Beam shape. */
+  Cartesian  a,b,c,d;        /* Beam equation parameters. */
+  double     omega,Period,v;
+
+  double  ImpactT;  /* Model intersection: time in seconds. */
+  Surface *ImpactS; /* Model intersection: surface pointer (NULL if miss). */
+
+  struct _Generator *Nxt;
+
+  /* User handle to additional generator data. */
+
+  void *UserData;
+} Generator;
+
+First, the location of the generator must be defined (Loc). This is
+the point in space, in some coordinate system S, from which electrons
+emerge. Distance in S should be measured in meters. Next, the emission
+direction D should be given, as Coelevation and Azimuth relative to
+the coordinate axes of S, in radians.  Coelevation is the angle of D
+relative to the positive z axis. The azimuth angle is measured between
+the projection of D on the xy plane, and the x axis. These angles are
+therefore the same as the spherical coordinate angles. Finally, the
+accelerating potential should be specified in Potential, and it MUST
+be a positive number. Volt is the mks unit of potential measurement.
+
+UserData is a field that is completely user-managed, and is used to
+attach additional information to each generator (e.g. the spacecraft
+carrying it).
+
+A (singly-linked) list of generators GL can be maintained with the
+assistance of the beam library. The Nxt field of the generator
+structure is used for list maintenance. GL is declared using
+
+Generator *GL=NULL;
+
+Gn_Create() creates a new generator (with NULL for UserData), and adds
+it to the front of the generator list *GL (i.e. pass the GL declared
+above as &GL to Gn_Create()). It then returns a pointer to the new
+generator under normal circumstances. It might return NULL if a memory
+allocation failure takes place.
+
+Generator *Gn_Create(Generator **GL);
+
+Gn_Free() and Gn_FreeList() deallocate the storage occupied by either
+the single generator *G, or the list GL.
+
+void Gn_Free(Generator *G);
+void Gn_FreeList(Generator *GL);
+
+The remaining fields of the generator structure are maintained by the
+system. They define several features of the beam produced by the
+generator, as well as describe the interaction of the beam with solid
+objects. These fields will be discussed below.
+
+
+Primary beam emissions.
+-----------------------
+
+Beam emissions are modeled in a simple way: the electrons, after
+emerging from the generator, are subjected only to the magnetic force.
+Hence, they follow a path that, in general, is helical.  However, in
+degenerate cases, the electrons may move in a circle, or along a line.
+
+The electron path may intercept a surface of a solid object (consult
+the documentation of the solid library for methods of defining solid
+objects). Beam_HitBodyList() performs the task of finding this
+intersection point, given a set of surfaces (a body), a generator, and
+the magnetic field intensity around the area of emission, in Tesla.
+Note that all point and vector measurements are assumed to be made in
+the same coordinate system.
+
+BOOLEAN Beam_HitBodyList(Cartesian *B,Generator *NewGen,Body *BL);
+
+Beam_HitBodyList() returns TRUE if and only if the beam produced by
+the generator *NewGen intersects any of the bodies in the body list
+BL. *B is the (presumably) constant magnetic field intensity in the
+volume of space traversed by the emitted electrons.  The function
+assumes that the Loc, Potential, Coelevation, Azimuth fields of *Gen
+contain meaningful values. In particular, Potential must be greater
+than zero, as stated above.
+
+When Beam_HitBodyList() returns, NewGen->ImpactS is a pointer to the
+intersected surface, and NewGen->ImpactT is the time of intersection,
+in seconds, provided intersection occurs. If, on the other hand, the
+beam escapes in outer space, the surface pointer is NULL. In either
+case, whether there is intersection or not, NewGen->BeamType contains
+the beam shape. a, b, c, d, omega, Period, and v contain some esoteric
+parameters used to define the beam shape.
+
+As stated, Beam_HitBodyList() (as well as Beam_SecondaryHitBody() and
+Beam_Sources() which are discussed later on) resets some of the fields
+of the generator whose emissions are examined. These fields describe
+the beam shape, and thus should not be altered by the user. Moreover,
+all the other functions described below, with the exception of
+Beam_SecondaryHitBody() and Beam_Sources(), assume that the
+shape-related fields of the generator structure contain meaningful
+information. It follows that Beam_HitBodyList() or
+Beam_SecondaryHitBody() or Beam_Sources() should be called prior to
+any of the other beam-related (Beam_*) functions.
+
+Three functions return decoded information on the beam's shape.
+Beam_Length() returns the length of the electron beam of the generator
+*Gen, in meters. If the beam escapes, the length is infinite, so the
+constant HUGE_VAL (a really big number) is returned.
+
+double Beam_Length(Generator *Gen);
+
+Beam_Point() calculates the location of the electrons at time t (in
+seconds) after emergence from the generator *Gen. The result is placed
+in *Pos, a coordinate measurement in the same coordinate system in
+which the location Loc of *Gen was specified.  FALSE is returned iff
+(i) at time t the electron beam does not exist, i.e. the electrons
+have intercepted the model at an earlier time, or (ii) the beam is
+circular and at time t the electrons are retracing their path.
+
+BOOLEAN Beam_Point(Generator *Gen,double t,Cartesian *Pos);
+
+Beam_Velocity() calculates the velocity of the electrons at time t (in
+seconds) after emergence from the generator *Gen. The result is placed
+in *V, in units of meters per second.
+
+void Beam_Velocity(Generator *Gen,double t,Cartesian *V);
+
+
+Rendering beam emissions.
+-------------------------
+
+Beam emissions might need to be sampled at points. The polyline
+connecting those points can be rendered on a graphics workstation and
+act as a representation of the electron beam. Another way we can
+visualize an electron beam is by drawing a cylinder whose axis is
+aligned with the beam axis, and whose radius is that of the beam. Two
+routines are provided in order to derive these graphical objects.
+
+Beam_Trace() returns a sequence of points along the electron beam of
+the generator *NewGen. A single point is returned for each invocation
+of Beam_Trace(). Point generation stops when the beam length exceeds
+NewLenRot (if NewMode is LENGTH) or when the number of beam rotations
+exceeds NewLenRot (if NewMode is ROTATIONS). Point generation might
+stop earlier than that if a beam shape parameter indicates that the
+beam had intercepted an object (NewGen->ImpactS non-NULL); in this
+case, the last point generated is the intersection point. NewGen,
+NewMode, and NewLenRot need only be specified once, passing TRUE in
+NewSequence. Beam_Trace() can then be called repetitively with
+NewSequence being FALSE: *NextPoint will contain the successive beam
+points, and the function will return TRUE. Beam_Trace() will return
+FALSE only when all the points in the specified range have been
+returned.
+
+typedef enum {LENGTH,ROTATIONS} BEAM_MODE;
+
+BOOLEAN Beam_Trace(BEAM_MODE NewMode,double NewLenRot,Generator *NewGen,
+		   Cartesian *NextPoint,BOOLEAN NewSequence);
+
+The ROTATIONS mode is ignored in the beam is linear, and a default
+section of the beam is then drawn. The length of this section is
+defined in meters in "user.h" as the constant LINEAR_LENGTH.
+Otherwise, in all other combinations of mode and beam shape, the
+length of each beam segment, i.e. the distance along the beam between
+successive beam points, will be SEGMENT_LENGTH (another "user.h"
+constant).
+
+Finally, observe that the use of static variables used to retain
+NewGen, NewMode, and NewLenRot between invocations of Beam_Trace()
+disallows nested calls to this function. In other words, all the
+points on one beam should be retrieved prior to processing any points
+on another beam.
+
+Beam_Cylinder() returns a cylindrical body of height Height, in
+meters. The cylinder is approximated by a polygonal mesh of Sides
+sides. It contains tightly the (helical) electron beam of the
+generator *Gen, starting from the emission point and extending towards
+the beam direction. The cylinder's starting point can alternatively be
+offset by Offset meters in front of the emission point. Hence,
+negative offsets move the cylinder "backwards", i.e. in the direction
+opposite to beam propagation.
+
+Body *Beam_Cylinder(Generator *Gen,int Sides,double Offset,double Height,
+		    Body **BL,Vertex **VS);
+
+Beam_Cylinder() stores the cylindrical body it constructs in the body
+list *BL. It also returns a pointer to the body. NULL may also be
+returned, but only if an error occurs. Finally, the vertex information
+of the new body is stored in the vertex space *VS.
+
+
+Secondary beam emissions.
+-------------------------
+
+An electron beam that intercepts an object during its propagation
+might rebound. The intersection point therefore becomes a new electron
+emitter. In order to study such phenomena, we wrote
+Beam_SecondaryHitBody().
+
+BOOLEAN Beam_SecondaryHitBody(Cartesian *B,Generator *NewGen,
+			      Body *BL,Body *BTarget,
+			      double Spread,double dSpread,
+			      double SecSpread,double dSecSpread,
+			      Generator *GenOut,Generator *SecGenOut);
+
+This function identifies secondary beam emissions from the generator
+*NewGen. It returns TRUE if and only if (iff) the primary or the
+secondary beam intersects the body *BTarget. The primary beam has a
+spread (half-angle) of Spread radians, while the secondary beam has
+SecSpread spread. The dSpread and dSecSpread parameters set the step
+between successive samples of the emitted beams; each spread parameter
+must lie in the range [0,HF_PI] (HF_PI is pi/2) and the spread steps
+much be positive.  The energy (potential) of the secondary emissions
+should be set in SecGenOut->Potential; this must be greater than 0
+Volts. *B is the (presumably constant) magnetic field intensity in the
+volume of space traversed by the emitted electrons, in Tesla.  The
+body list BL contains other bodies which are present in the model and
+might intercept the emissions before the target is reached; this list
+may contain the target body *BTarget, although this is not
+recommended.
+
+Upon return, GenOut->ImpactS is a pointer to the intersected surface
+of the primary emissions, and GenOut->ImpactT is the time of
+intersection, in seconds. GenOut->ImpactS is NULL if no intersection
+occurs. Similarly for SecGenOut and secondary beam emissions, provided
+the primary beam missed the target, but intersected some surface. The
+other fields of the returned generators *GenOut, and *SecGenOut are
+properly set to their respective beam shape parameters.
+
+Beam_SecondaryUtil() is a utility function, calculating useful
+information of primary/secondary beam emission pairs. In particular,
+the function first assumes that Gen, GenOut, and SecGenOut are the
+NewGen, GenOut, SecGenOut parameters of Beam_SecondaryHitBody(),
+respectively; moreover, Beam_SecondaryHitBody() must have been called
+before Beam_SecondaryUtil(). Then, this function places in *Spread the
+angular deviation of the primary beam from its main direction, and
+sets *Incidence to the angle between the primary beam and the
+intersected surface normal, at the intersection point.
+
+void Beam_SecondaryUtil(Generator *Gen,Generator *GenOut,Generator *SecGenOut,
+			double *Spread,double *SecSpreadV,double *SecSpreadR,
+			double *Incidence,double *SecIncidence);
+
+If secondary emissions were necessary to hit the target, then (i)
+*SecSpreadV is assigned the angle between the secondary beam and the
+rebounding surface normal; (ii) *SecSpreadR is the angle between the
+secondary beam and the reflected primary beam direction, and (iii)
+*SecIncidence is the angle between the secondary beam and the
+intersected target surface normal, at their intersection point.
+
+Beam_Sources() identifies the possible sources of secondary beam
+emissions. The location and orientation of the electron DETECTOR, and
+the energy of the detected electrons should be specified in *Det
+(fields Loc, Coelevation, Azimuth, Potential). Note that, in a sense,
+we are abusing the generator structure: we are using it to pass
+properties of an electron detector, not a generator. Spread specifies
+the angular range of the detector in radians (i.e. what are the
+possible angles, relative to the detector's orientation, at which the
+electrons can hit the detector).  The dSpread parameter sets the step
+between successive samples of the incoming beams; the Spread parameter
+must lie in [0,HF_PI] and the spread step much be positive. *B is the
+(presumably constant) magnetic field intensity in the volume of space
+traversed by the electrons (in Tesla). The body list BL contains all
+the bodies which are present in the model and which are possible
+sources of secondary emissions.
+
+int Beam_Sources(Cartesian *B,Generator *Det,Body *BL,
+		 double Spread,double dSpread,
+		 Generator GenOut[],int NHits[],int NGen);
+
+Upon return, the GenOut array (of size NGen) is filled with the
+electron beams which hit the detector. For each generator in the
+GenOut array, its ImpactS field is set to a pointer to a surface which
+might have generated the detected electrons. Also, Coelevation and
+Azimuth contain the incoming direction of the detected electrons, i.e.
+the direction at the detection point. If multiple beam emissions from
+the same surface reach the detector, only one sample emission is
+recorded in the GenOut array, while the corresponding entry (same
+array index) in NHits contains the number of sample emissions
+originating from the same surface. If more than NGen surfaces might
+have been possible originators, then the first NGen discovered will be
+listed in GenOut.  The function's return value indicates the number of
+valid entries in those two output arrays.
+
+
+The "user.h" constants for beam intersections.
+----------------------------------------------
+
+The constants in "user.h" tweaking the accuracy of intersection
+reporting are:
+
+ - LENGTH_ACCURACY is the margin of error in (helical) beam
+intersection reporting, in terms of meters of distance. The error
+vector lies in a direction perpendicular to the intersected or missed
+surface.
+
+ - PLANE_DISTANCE sets the maximum (normal) distance of the generator
+emergence point from a surface plane, in meters, such that the
+emergence point is considered to lie on the plane.
+
+
+Constants and macros.
+---------------------
+
+Two constants are used to model beam emissions and implement the
+functions given above. These constants are exported, and thus can be
+used provided "beam.h" is included in the relevant source file. Here
+they are:
+
+ - Electron mass in kg: ME = 9.1095E-31.
+ - Absolute value of electron charge in Cb: QE = 1.602E-19.
+
+
+Using the library.
+------------------
+
+An application that uses any of the routines and constants defined
+above must include the proper function declarations and type
+definitions defined in "beam.h".  This file, in turn, assumes that it
+has access to some items defined in other files. It follows that the
+lines
+
+#include <math.h>
+#include "advmath.h"
+#include "solid.h"
+#include "beam.h"
+
+must appear before any function documented here is called.
+
+The compiled application should link with the beam library (containing
+the implementation of the functions described above), as well as some
+other libraries. It suffices to link with "-lbeam -lsolid -lam -lm" as
+linker options.

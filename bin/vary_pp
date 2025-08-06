@@ -1,0 +1,244 @@
+#!/bin/csh -f
+#
+#
+
+if (("$1" == '') || ("$1" == '-help') || ("$1" == '-doc') || ($#argv < 2)) then
+   echo ' '
+   echo 'Usage:    vary_pp      -f <fileheader>'
+   echo '                       -var <variable> -range <start> <stop> <incr>' 
+   echo '                       -col <column #> [-o <filename>]'
+   echo '                       [-matlab] [-ncsa] [-nohead]'
+   echo ' '
+
+   if (("$1" == '-help') || ("$1" == '-doc')) then
+      echo 'This script converts the output from the files created by a'
+      echo 'vary operation into a two dimensional array of data.  It takes'
+      echo 'files with the name <fileheader>.<variable>_<value> and extracts'
+      echo 'data from the column specified (column 0 is the first column)'
+      echo 'and places all the points into <fileheader>.2ddat or the specfied'
+      echo 'file.'
+      echo ' '
+      echo 'By default the data comes out with both column and row headings.'
+      echo 'The -matlab option and -ncsa options format the data in such a way'
+      echo 'as to allow MATLAB or NCSA Import2HDF to read in the data.'
+      echo ' '
+      echo 'By default, the first line of the data files is expected to contain'
+      echo 'column headers and is skipped unless the -nohead option is used.'
+      echo ' '
+   endif
+   exit
+endif
+
+##############################################################################
+#default settings
+
+set filehead   = ''
+set vvar       = ''
+set start      = ''
+set stop       = ''
+set incr       = ''
+set out_col    = 0
+set out_file   = ''
+set dgraphp_o  = 1
+set matlab_o   = 0
+set ncsa_o     = 0
+set t_start    = 2
+
+##############################################################################
+#now read in command line arguments
+
+set no_args = $#argv
+set cnt = 1
+
+while ($no_args >= $cnt )
+
+   switch ("$argv[$cnt]")
+      case '-f' :
+         @ cnt++
+         set filehead  = "$argv[$cnt]"
+         breaksw
+      case '-var' :
+         @ cnt++
+         set vvar      = "$argv[$cnt]"
+         breaksw
+      case '-range' :
+         @ cnt++
+         set start     = "$argv[$cnt]"
+         @ cnt++
+         set stop      = "$argv[$cnt]"
+         @ cnt++
+         set incr      = "$argv[$cnt]"
+         breaksw
+      case '-o' :
+         @ cnt++
+         set out_file  = "$argv[$cnt]"
+         breaksw
+      case '-col' :
+         @ cnt++
+         set out_col   = "$argv[$cnt]"
+         breaksw
+      case '-matlab' :
+         set matlab_o  = 1
+         set dgraphp_o = 0
+         set ncsa_o    = 0
+         breaksw
+      case '-ncsa' :
+         set ncsa_o    = 1 
+         set matlab_o  = 0
+         set dgraphp_o = 0
+         breaksw
+      case '-nohead' :
+         set t_start   = 1 
+         breaksw
+      case ' ' :
+         breaksw
+      default :
+         echo ' '
+         echo ' Parameter Error ['"$argv[$cnt]"'] - type "vary" for usage'
+         echo ' '
+         exit(1)
+   endsw
+
+   @ cnt = $cnt + 1
+
+end
+
+if ($filehead == "") then
+   echo ' '
+   echo ' Must specify a data fileheader (-f <fileheader>) \!'
+   echo ' '
+   exit (1)
+endif
+
+if ($vvar == "") then
+   echo ' '
+   echo ' Must specify a variable to vary (-var <variable name>) \!'
+   echo ' '
+   exit (1)
+endif
+
+if ($start == "" || $stop == "" || $incr == "") then
+   echo ' '
+   echo ' Must completely specify range over which to vary (-range <...>) \!'
+   echo ' '
+   exit (1)
+endif
+
+##############################################################################
+# Make a list of the varying parameter values
+
+echo 'for (p='"$start"';p<='"$stop"';p+='"$incr"') p ; quit' > vary_pp.tmp.$$
+
+set p_list = `bc -l vary_pp.tmp.$$`
+
+rm vary_pp.tmp.$$
+
+##############################################################################
+# Determine output formats
+
+if ($dgraphp_o) then
+   set row_lab = 1
+   set col_lab = 1
+   echo -n "##    "   >  vary_pp_chout.tmp.$$
+   echo $p_list       >> vary_pp_chout.tmp.$$
+   set row_lab_col = 1
+else if ($matlab_o) then
+   set row_lab = 0
+   set col_lab = 0
+else if ($ncsa_o) then 
+   set row_lab     = 1
+   set col_lab     = 1
+   set row_lab_col = 2
+   echo $p_list >> vary_pp_chout.tmp.$$
+else
+   echo "What format dummy?????"
+endif
+   
+##############################################################################
+# Extract row header column from first file
+
+if ($row_lab) then
+   set in_file = "$filehead"'.'"$vvar"'_'"$p_list[1]"'.out'
+
+   tail +$t_start $in_file |     \
+   gawk -v column=$row_lab_col ' \
+   BEGIN{                        \
+      FS = " "                   \
+   }                             \
+   {                             \
+      print $column              \
+   }' > vary_pp_rhout.tmp.$$
+endif
+
+if ($dgraphp_o) then
+   cp vary_pp_rhout.tmp.$$ vary_pp_dout.tmp.$$
+else
+   echo -n "" > vary_pp_dout.tmp.$$
+endif
+
+##############################################################################
+# Now extract all of the data
+@ col_extr = $out_col + 1
+
+foreach par_val ($p_list)
+   set in_file = "$filehead"'.'"$vvar"'_'"$par_val"'.out'
+
+   echo 'Extracting data from '"$in_file"
+
+   tail +$t_start $in_file |  \
+   gawk -v column=$col_extr ' \
+   BEGIN{                     \
+      FS = " "                \
+   }                          \
+   {                          \
+      print $column           \
+   }' > vary_pp_cout.tmp.$$
+
+   paste vary_pp_dout.tmp.$$ vary_pp_cout.tmp.$$ > vary_pp_pout.tmp.$$
+   mv vary_pp_pout.tmp.$$ vary_pp_dout.tmp.$$
+end
+
+##############################################################################
+# Now display/produce output
+
+if ($dgraphp_o) then
+  cp  vary_pp_chout.tmp.$$   vary_pp_out.tmp.$$
+  cat vary_pp_dout.tmp.$$ >> vary_pp_out.tmp.$$
+endif
+
+if ($matlab_o) then
+  cp vary_pp_dout.tmp.$$ vary_pp_out.tmp.$$
+endif
+
+if ($ncsa_o) then
+  set nrows = `cat vary_pp_dout.tmp.$$ | wc -l`
+  set ncols = $#p_list
+  echo "$nrows"' '"$ncols" >  vary_pp_out.tmp.$$
+  echo "Finding Min&Max for NCSA Import2HDF"
+  echo "maxval minval"
+  set row_head = `cat vary_pp_rhout.tmp.$$`
+  echo $row_head           >> vary_pp_out.tmp.$$
+  cat vary_pp_chout.tmp.$$ >> vary_pp_out.tmp.$$
+  cat vary_pp_dout.tmp.$$  >> vary_pp_out.tmp.$$
+endif
+
+if ($out_file == "") then
+   cat vary_pp_out.tmp.$$
+   rm  vary_pp_out.tmp.$$
+else
+   mv  vary_pp_out.tmp.$$ $out_file
+endif 
+
+##############################################################################
+# CLEANUP
+
+if ($row_lab) then
+   rm vary_pp_rhout.tmp.$$
+endif
+
+if ($col_lab) then
+   rm vary_pp_chout.tmp.$$
+endif
+
+rm vary_pp_cout.tmp.$$
+rm vary_pp_dout.tmp.$$

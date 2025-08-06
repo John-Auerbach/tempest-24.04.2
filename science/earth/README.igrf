@@ -1,0 +1,77 @@
+References for the IGRF models we are using.
+============================================
+
+
+IGRF 1985.
+----------
+
+The IGRF 85 coefficients we are currently using were copied from the
+following paper.
+
+TITLE:          International Geomagnetic Reference Field revision 1987
+ORGANIZATION:   IAGA Division I Working Group I
+PUBLICATION:    1987.
+                IN:  Journal of Geomagnetism and Geoelectricity ; Vol. 39, No.
+                  12, p. 773-779
+DOCUMENT TYPE:  Serial (Level: Analytic)
+LANGUAGE:       English
+CATEGORY:       Geophysics, solid-earth (18)
+THESAURUS:  Earth, magnetic field, mathematical models, models, International
+   Geomagnetic Reference Field
+NOTES:  GeoRef ID:  88-34270  (GSA 88-32635)
+   ISSN  0022-1392
+   Coden:  JGEGAB
+
+
+IGRF 1990.
+----------
+
+The IGRF 90 coefficients we are currently using were obtained via
+anonymous ftp from
+
+World Data Center A for Solid Earth Geophysics
+National Geophysical Data Center
+NOAA, Code E/GCI
+325 Broadway
+Boulder
+Colorado 80303
+U.S.A.
+Phone #: (303) 497 6521
+
+The following paper gives the IGRF 1990 coefficients. The main
+coefficients are a rounded (no decimals) version of the data we
+obtained via ftp.  The secular variation coefficients are identical to
+the ones we use. Also, this paper gives the final values for the 1985
+model (DGRF 1985) which differ slightly from our present values for
+the IGRF 1985 coefficients.
+
+TITLE:          International Geomagnetic Reference Field, 1991 revision
+AUTHORS:        Langel, R. A.; Mundt, W.; Barraclough, D. R.; Barton, C. E.;
+                  Golovkov, V. P.; Hood, P. J.; Lowes, F. J.; Peddie, N. W.; Qi
+                  Gui-zhong; Quinn, J. M.; Shea, M. A.; Srivastava, S. P.;
+                  Winch, D. E.; Yukutake, T.; Zidarov, D. P.
+ORGANIZATION:   International Association of Geomagnetism and Aeronomy,
+                  Division V, Working Group 8 GBR
+PUBLICATION:    March 1992.
+                IN:  Geophysical Journal International ; Vol. 108, No. 3, p.
+                  945-946
+DOCUMENT TYPE:  Serial (Level: Analytic)
+LANGUAGE:       English
+CATEGORY:       Geophysics, solid-earth (18)
+THESAURUS:  Earth, magnetic field, revision, mathematical models, models,
+   equations, secular variation, International Geomagnetic Reference Field
+NOTES:  GeoRef ID:  92-57599  (GSA 92-33477)
+   ISSN  0955-419X
+
+A set of sample data points for IGRF 1990, listed in "igrf.samples",
+were obtained via e-mail from W. Minor Davis on 7/7/92. His contact
+information follows.
+
+W. Minor Davis
+National Geophysical Data Center
+Mail Code E/GC1
+325 Broadway
+Boulder, CO, 80303
+Phone : 303-497-6337 or 6478
+Fax :   303-497-6513
+Internet: wmd@ngdc1.ngdc.noaa.gov

@@ -1,0 +1,139 @@
+Using the libraries.
+--------------------
+
+Every library directory contains a "README" file. That file contains
+at least a list of all C include files that must be incorporated in
+every program that wants to use the associated science library. These
+files should be included in the order specified. Moreover, if
+"advmath.h" appears in the list of required include files, then, in
+order to avoid conflict with the Motif definitions of the TRUE and
+FALSE constants, include "advmath.h" prior to any Motif header file.
+
+Also in the "README" file, there is a sample set of C compiler
+switches, specifying the libraries that must be defined for the C
+compiler. In other words, the compiled application that uses a library
+A should link not only with library A, but also any other libraries
+that A's routines use. This set of dependencies of each library is
+specified in the "README" file, in the "Using the library" section; a
+summary is included in this file, too. The location of the library
+files, which becomes the argument of a C compiler "-L" switch, is
+"~sets/science/lib/$ARCH" (where the "ARCH" environment variable is
+set using "setenv ARCH `/bin/arch`").
+
+Some libraries allow the user to specify a few key parameters at
+compile-time, by changing the file "user.h". These functions usually
+implement abstract mathematical equations. But they might fall short
+of their target because of floating point rounding errors (which
+mathematicians don't, and should not, think about). To allow the user
+to overcome such errors, the library can be recompiled with rounding
+parameters appropriate to the system (or application) that uses the
+library. If "user.h" is modified, the library must be recompiled, and
+all library clients (other applications, or other libraries) must be
+relinked for the changes to take effect. Another example of the use of
+"user.h" comes from the earth library: a constant in that file sets
+the year of the IGRF model used to obtain Earth magnetic field
+intensity values.
+
+A file "verify.c" also appears in every library directory. It contains
+code that tests all the routines in this library. It can be used as a
+guide on how to call the library functions. More importantly, it is an
+application that should be compiled and executed whenever the
+associated library is ported to a new platform. It allows the user to
+see whether the "user.h" settings are adequate for the floating-point
+processing of the new platform, and tests the compatibility of the C
+code in which the library is written with the local C compiler. The
+provided "Makefile" (one for each library) compiles the "verify.c"
+application using "make verify".
+
+Another example file provided in each library directory is "test.c"
+which can be compiled using "make test". It can act as a short-term
+test-bed for experimenting with the functions defined in the
+library. Feel free to modify its main().
+
+An even better example application that makes full use of most library
+routines is "modeller", whose source code is available in
+"~/sets/beam/codeV5/graphics". In particular, the file "gse.c"
+includes routines that analyze realtime shuttle telemetry, convert
+measurements between different formats, use magnetic field models to
+derive estimates of field intensity, etc. Also, "draw.c" uses the
+"solid" library for rendering the shuttle model.
+
+The documentation of all library routines is either included in the
+"README" file, or is available via in-line comments preceding the
+function definition. We suggest you consult the documentation for the
+advanced mathematics library first, for two reasons. First, the math
+routines described there are very useful, and form the basis of every
+other library (except the string space library). Second, some general
+ideas concerning the design of the libraries are introduced and
+illustrated. Also, prior to reading the documentation of a library L,
+it would be wise to have read the documentation of those libraries on
+which L relies (consult the list in the last section of this file).
+
+
+Compiling a library on a new system.
+------------------------------------
+
+Before attempting to recompile a library, make sure that other
+libraries it may rely on are also compiled. For example, the earth
+library uses routines of the math library, so the math library should
+be up-to-date before recreating the earth library. In order to avoid
+bothering with such dependencies, it is suggested to recompile all
+libraries together by sourcing the C shell script
+"~sets/science/Remake". This script also compiles and executes the
+verification programs ("verify.c") for each library and reports the
+collected results after all compilations are completed.
+
+Follow the steps below in order to compile the libraries on a new
+system:
+
+ - Set the environment variable ARCH to the system architecture by
+executing "setenv ARCH `/bin/arch`".
+ - Go to "~sets/science/lib" and "mkdir $ARCH".
+ - Go to the source directory of the library you want to make and type
+"make". If you want to remake all libraries, type "source Remake" in
+the "~sets/science" directory, instead.
+ - Then, if you are compiling an individual library, re-make the
+verification program "verify.c" by typing "make verify". Run the
+executable ("verify") and make sure every test is passed.
+
+
+Compiling applications on a new system.
+---------------------------------------
+
+The library header files provide function prototypes with and without
+the argument declarations. The former form enhances the compiler's
+ability to do type-checking, but it may be disallowed by anachronistic
+compilers. Define the "#define" constant "_NO_PROTO" in your source
+code if this is the case.
+
+
+Dependencies.
+-------------
+
+For the sake of quick and easy reference, here is the list of library
+dependencies:
+
+string space (strsp): none
+ (-lstrsp).
+
+advanced math (am): system math library
+ (-lam -lm).
+
+attitude (att): advanced math, and system math library
+ (-latt -lam -lm).
+
+earth (earth): advanced math, and system math library
+ (-learth -lam -lm).
+
+solid (solid): advanced math, and system math library
+ (-lsolid -lam -lm).
+
+beam (beam): solid, advanced math, and system math library
+ (-lbeam -lsolid -lam -lm).
+
+orbit (orbit): earth, advanced math, and system math library
+ (-lorbit -learth -lam -lm).
+
+reader (reader): beam, solid, advanced math, string space, and system
+ math library.
+ (-lreader -lbeam -lsolid -lam -lstrsp -lm).

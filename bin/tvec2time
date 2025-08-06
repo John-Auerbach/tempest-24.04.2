@@ -1,0 +1,32 @@
+#!/bin/csh -f
+#
+# file: tvec2time
+
+if ($1 == "-help") then
+
+echo ' '
+echo 'Usage: tvec2time ["ddd" ["hh" ["mm" ["ss"]]]]'
+echo ' '
+echo 'where the time is given as 1 to 4 integers separated by blanks.'
+echo 'Missing entries are assumed to be zero, and if no command line'
+echo 'argument is present, input is taken from stdin.  The output is'
+echo 'a time in the form:  "ddd/hh:mm:ss".  Note that a blank line in'
+echo 'a file will be converted to time 000/00:00:00.'
+echo ' '
+
+exit
+endif
+
+
+
+if ($1 == "") then 
+
+awk '{ printf("%03s/%02s:%02s:%02s\n", $1, $2, $3, $4) }'
+
+
+else
+ 
+echo "$*" | awk '{ printf("%03s/%02s:%02s:%02s\n", $1, $2, $3, $4) }'
+
+endif
+

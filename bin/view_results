@@ -1,0 +1,283 @@
+#!/bin/csh -f
+#
+#
+
+if (("$1" == '') || ("$1" == '-help') || ("$1" == '-doc') || ($#argv < 2)) then
+
+more << EOM
+
+Usage:    view_results -f <fileheader> [-title <title>]
+                       [-xcol  <xcol>] [-xrange  <xmin> <xmax>]
+                       [-ycol  <ycol>] [-yrange  <ymin> <ymax>]
+                       [-ycol2 <ycol>] [-yrange2 <ymin> <ymax>]
+                       [-noxhms] [-lpr] [-nodisp] [-addopt <options>]
+
+EOM
+
+   if (("$1" == '-help') || ("$1" == '-doc')) then
+more << EOH
+
+
+
+EOH
+   endif
+   exit
+endif
+
+##############################################################################
+#default settings
+
+set filehead   = ''
+set datatail   = '.out'
+set labeltail  = '.labels'
+
+set title      = ' '
+set title_sw   = ''
+
+set xcol       = 1
+set xmin       = ''
+set xmax       = ''
+set xrange     = ''
+set ycol       = 0
+set ymin       = ''
+set ymax       = ''
+set yrange     = ''
+set over       = 0
+set overlay    = ''
+set ylabel2    = ''
+set ymin2      = ''
+set ymax2      = ''
+set yrange2    = ''
+
+set lpr        = ''
+set disp       = '-nodisp'
+set options    = ''
+
+
+##############################################################################
+#now read in command line arguments
+
+set no_args = $#argv
+set cnt = 1
+
+while ($no_args >= $cnt )
+
+   switch ("$argv[$cnt]")
+      case '-f' :
+         @ cnt++
+         set filehead  = "$argv[$cnt]"
+         breaksw
+      case '-xcol' :
+         @ cnt++
+         set xcol  = "$argv[$cnt]"
+         breaksw
+      case '-ycol' :
+         @ cnt++
+         set ycol  = "$argv[$cnt]"
+         breaksw
+      case '-xrange' :
+         @ cnt++
+         set xmin      = "$argv[$cnt]"
+         @ cnt++
+         set xmax      = "$argv[$cnt]"
+         breaksw
+      case '-xdelta' :
+         @ cnt++
+         set options   = "$options"' -xdelta '"$argv[$cnt]"
+         @ cnt++
+         set options   = "$options"' '"$argv[$cnt]"
+         breaksw
+      case '-yrange' :
+         @ cnt++
+         set ymin      = "$argv[$cnt]"
+         @ cnt++
+         set ymax      = "$argv[$cnt]"
+         breaksw
+      case '-ydelta' :
+         @ cnt++
+         set options   = "$options"' -ydelta '"$argv[$cnt]"
+         @ cnt++
+         set options   = "$options"' '"$argv[$cnt]"
+         breaksw
+      case '-title' :
+         @ cnt++
+         set title     = "$argv[$cnt]"
+         breaksw
+      case '-lpr' :
+         set lpr       = '-lpr'
+         set disp      = '-nodisp'
+         breaksw
+      case '-nodisp' :
+         set disp      = '-nodisp'
+         breaksw
+      case '-ycol2' :
+         @ cnt++
+         set over  = "$argv[$cnt]"
+         breaksw
+      case '-yrange2' :
+         @ cnt++
+         set ymin2     = "$argv[$cnt]"
+         @ cnt++
+         set ymax2     = "$argv[$cnt]"
+         breaksw
+      case '-ydelta2' :
+         @ cnt++
+         set options   = "$options"' -ydelta2 '"$argv[$cnt]"
+         @ cnt++
+         set options   = "$options"' '"$argv[$cnt]"
+         breaksw
+      case '-logx'    :
+         set options   = "$options $argv[$cnt]"
+         breaksw
+      case '-logy'    :
+         set options   = "$options $argv[$cnt]"
+         breaksw
+      case '-xdim'    :
+         set options   = "$options $argv[$cnt]"
+         @ cnt++
+         set options   = "$options $argv[$cnt]"
+         breaksw
+      case '-ydim'    :
+         set options   = "$options $argv[$cnt]"
+         @ cnt++
+         set options   = "$options $argv[$cnt]"
+         breaksw
+      case '-rotate'  :
+         set options   = "$options $argv[$cnt]"
+         @ cnt++
+         set options   = "$options $argv[$cnt]"
+         breaksw
+      case '-toeps'   :
+         set options   = "$options"' -xdim 6.0 -ydim 4.0 -rotate portrait'
+         set disp      = '-nodisp'
+         breaksw
+      case '-toeps'   :
+         set options   = "$options"' -noxhms'
+         set disp      = '-nodisp'
+         breaksw
+      case '-addopt'  :
+         @ cnt++
+         set options   = "$options $argv[$cnt]"
+         breaksw
+      case ' ' :
+         breaksw
+      default :
+         echo ''
+         echo ' Parameter Error ['"$argv[$cnt]"'] - type "view_results" for usage'
+         echo ' '
+         exit(1)
+   endsw
+
+   @ cnt = $cnt + 1
+
+end
+
+if ($filehead == "") then
+   echo ''
+   echo ' Must specify a data fileheader (view_sim <fileheader>) \!'
+   echo ' '
+   exit (1)
+endif
+
+set datafile  = "$filehead$datatail"
+set labelfile = "$filehead$labeltail"
+
+if (! -f "$datafile") then
+   echo ''
+   echo ' Data file '"$datafile"' cannot be found'
+   echo ' '
+   exit (1)
+endif
+
+if (! -f "$labelfile") then
+   echo ''
+   echo ' Label file '"$labelfile"' cannot be found'
+   echo ' '
+   exit (1)
+endif
+
+##############################################################################
+# Make a list of the output variable labels
+
+set label_list = "`cat "$labelfile"`"
+
+##############################################################################
+#
+
+if ($ycol == 0) then
+   echo ''
+   echo ' You MUST choose a data value to plot (using -ycol)'
+   echo ' The following data is available:'
+   echo ' '
+   @ cnt = 1
+   while ($cnt <= $#label_list)
+      echo $cnt'     '"$label_list[$cnt]"
+      @ cnt++
+   end
+   echo ' '
+   exit (1)
+endif
+
+if ($xcol > $#label_list) then
+   echo ''
+   echo ' X column number greater than number of columns ('"$#label_list"')'
+   echo ' '
+endif
+
+if ($ycol > $#label_list) then
+   echo ''
+   echo ' Y column number greater than number of columns ('"$#label_list"')'
+   echo ' '
+endif
+
+if ($over > $#label_list) then
+   echo ''
+   echo ' Overlay Y column number greater than number of columns ('"$#label_list"')'
+   echo ' '
+endif
+
+
+##############################################################################
+#
+
+echo ' '
+echo 'Plotting '"$label_list[$ycol]"' vs. '"$label_list[$xcol]"
+
+@ m_xcol = $xcol - 1 ;
+@ m_ycol = $ycol - 1 ;
+@ m_over = $over - 1 ;
+
+if ("$xmin" != '') then
+   set xrange = '-xrange '"$xmin"' '"$xmax"
+endif
+
+if ("$ymin" != '') then
+   set yrange = '-yrange '"$ymin"' '"$ymax"
+endif
+
+if ("$ymin2" != '') then
+   set yrange2 = '-yrange2 '"$ymin2"' '"$ymax2"
+endif
+
+if ("$title" != ' ') then
+   set title_sw = '-title '
+endif
+
+if ($over != 0) then
+   set overlay = '-overlay '"$m_ycol"' '"$m_over"
+   echo '    overlaying '"$label_list[$over]"
+else
+   set over = 1
+endif
+
+if ("$label_list[$xcol]" != 'GMT' && "$label_list[$xcol]" != 'MET') then
+   set options   = "$options"' -noxhms'
+endif
+
+echo ' '
+
+multplot -cols $m_xcol $m_ycol -xlab "$label_list[$xcol]" $xrange     \
+                               -ylab "$label_list[$ycol]" $yrange     \
+                               $overlay -ylab2 "$label_list[$over]"   \
+                               $yrange2 $title_sw "$title" $lpr $disp \
+                               -indat $filehead$datatail -ps $filehead $options

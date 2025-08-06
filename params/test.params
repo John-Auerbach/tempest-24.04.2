@@ -1,0 +1,85 @@
+# Simple Test file
+
+#### EPOCH PARAMETERS ####
+Ephemeris_Year	= 2010
+Ephemeris_Time	= 001/00:00:00
+Circular_Alt    = 500000
+Inclination	= 28.5
+RAAN		= 0.0
+Arg_Perigee	= 0.0
+Anomaly_Type	= True
+True_Anomaly	= 0.0
+
+######### SSimulation Parameters #######
+Orbit_Perturb	=  Yes
+Orbit_Decay	=  Yes
+Orbit_Precise   =  Yes
+Ephem_From_RV	=  Yes
+
+######## NO libration (EMFgg = EMFlib) #####
+InPlane_Lib     =   0.00
+OutofPlane_Lib  =   0.00
+Radial_Lib      =   0.00
+IP_Phase	=   0.00
+OP_Phase	=   0.00
+Rad_Phase	=   0.00
+
+######## Simulation Start & Stop Time #####
+Start_Year	= 2010
+Start_Time	= 001/00:00:00.000
+Stop_Year	= 2010
+Stop_Time	= 001/06:00:00.000
+######## MET0 Time = Launch time #####
+MET0_Year	= 2010
+MET0_Time	= 001/00:00:00.00
+
+###################################################################
+# Increment by 10 seconds
+#
+Time_Incr	= 000/00:00:10.000
+SS_Output	= 5
+
+###################################################################
+# Set tether length to 'upward deployed'  (HARVEST MODE)
+# 1.3 km, Bare
+
+
+Tether_End      = 1300.0
+Bare_Start	=  000.0
+Bare_End	= 1300.0
+T_Resistivity	= 0.00000282   # ohms * cm (Aluminum)
+T_Cond_Radius	= 0.000225     # meters (25 AWG)
+
+Bare_Segments	= 1000
+
+Bare_Load	= 120	# Ohms
+
+############# Upper Contactor ###################################
+# anode (collects electrons)
+
+# Initial guess for Anode Bias
+Anode_Bias	= 400.0
+
+###################################################################
+# HCPC for lower body contactor
+# P1=Molecular weight of expellant (Xenon = 131.29)
+# P2=Gas flow rate in SCCM
+# P3=Double Layer Voltage Drop (e.g. 4.0V)
+# P4=Source Te (e.g 3.889)
+
+Contactor_Down  = 7
+Contactor_P1_Dn = 131.29
+Contactor_P2_Dn = 0.5
+Contactor_P3_Dn = 4.0
+Contactor_P4_Dn = 3.889
+
+# Initial Guess for Cathode Bias
+Cathode_Bias	= -15.0
+
+###################################################################
+# List out outputs
+
+Show_Vars	= MET_DAYS
+Show_Vars	= P_LOAD
+
+

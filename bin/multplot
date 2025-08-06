@@ -1,0 +1,1697 @@
+#!/bin/csh -f
+# 
+# file: multplot - generic simple parameter plotting using plotl 
+#
+# Changes no added yet - histogramming and .multplot file 
+# handling as requested by Nestor V.
+#
+# V3.9g - 23 May 1994, VMA
+# fixed a bug introduced by the changing of the format of the archive
+# files.  
+#
+# V3.9f - 16 December 1993, VMA
+# fixed the following:
+# a) user provided xlab overides 'GMT' if xcol = 0 and xlab provided
+# b) user can force xhms even if xcol != 0
+# c) added yhms in the argument checklist; still not implemented or
+#        documented
+#
+# V3.9e - 5 December 1993, VMA 
+#
+# V3.9e - fixed the bug about log axes.  plotl command is xlog, ylog;
+# not logx, logy.  Hence any log made both a log before this fix.
+#
+# V3.9d - fixed a minor bug with regard to variables with a format
+# of the sort $stream*%varname where the values variabe needs to be 
+# inclosed in quotes so that the $part is not interperted by the 
+# shell.  It was not in one location - in the if statement to verify that
+# for an overlay 2 variables had been specified.  The if was always
+# executed, so the error showed up even if no overlay was being done.
+#
+# V3.9c - fixing a minor inconsistency of saying the default it grid
+# on, when in fact it is grid off!  My goof.  (Leaving grid off as the
+# default unless users find it desirable to be the other way.)
+#
+# Changes V3.9b - added use of rpr for printing, so that remote 
+# sites could be handled.  Not that uses $PRINTER as destination.
+#
+# Changes V3.9a - added the -noxhms flag to make the facility more
+# general.  Also added the list of dependancies and improvements to
+# the documentation. 
+#
+# Changes V3.9 - added documentation to cover all new switches and 
+# capabilities and a few capabilities found to be not fully implemented.
+#
+# Remaining Tasks (after V3.9) [not a priority]:
+# 1) need to add more input parameter error checking
+# 2) restructuring of plot script generation section to remove redundancy
+#    in script creation.  Functinal now, but not "clean".
+# 3) Would like to add capability to use Matlab plotting as well as 
+#    plotl
+#
+# Changes V3.8 - added the ability to overlay two variables - FINALLY!;
+# fixed a bug from V3.7 that resulted in output files being deleted and
+# also left the pid off fles named from the command line.  Added the 
+# ability to control the second yaxis range.
+#
+# Changes V3.7 - added file handling capability to allow data and plot 
+# scripts, as well as archive scripts to be located in any directory.
+# The user can override the default directory for scripts and a check 
+# is made for the existence of the files.
+#
+# Changes V3.6 - added the -eps flag to allow encapsulated post-script 
+# output and fixed plot and data file names.  Added logx,y and hscr capability
+# 
+# Changes V3.5 - changed name of my.plot.$$ to my.$$.plot to match the 
+# convention of .plot files and to not have files ending with pid's; and
+# added -eps option to output encapsulated postscript.
+# 
+# Changes 3.4 - added more cleanup at end to handle misc temp file 
+# Fixed bug in xdim/ydim setup from V3.3
+
+# In case the user interrupts the running, cleanup the temporary files
+# that are created.  Still does not catch all things, but better.
+
+# list of dependancies - the following utilities are called:
+#    plotl    
+#    ps2eps-mac
+#    multext    (uses tvec_plus, striptab, plus others already in list)
+#    gawk
+#    time2tvec  (uses awk)
+#    tvec2time  (uses awk)
+#    tvec_minus (uses awk)
+#    tvec_mod   (uses awk)
+#    gensetup
+#    clearsetup
+#    ghostview  (uses gs or ghostscript)
+#    
+
+onintr cleanup
+
+if (("$1" == '') || ("$1" == '-?') || (($#argv < 2) && ("$1" != '-help')) && (($#argv < 2) && ("$1" != '-doc'))) then
+
+cat << EOM
+ Simple Usage: 
+ 
+ multplot [-start time][-end time | -dur time][-rate rate][-repeat num]
+          [-scatter][-grid][-cols xcol ycol][-xlab xlabel][-ylab ylabel] 
+          [-overlay col1 col2][-title title][-caption text][-zoom num]
+          [-lpr][-nodisp][-outdat filehead][-ps filehead][-help][-doc]
+          [-dbkey keyword][-pscript filename|null][-dscript filename]
+          [-indat filename][-vars var1 [var2 ...]]
+          [-swapendian]
+
+ Where -vars must be the last argument and variable names are used for axes 
+ labels if no labels are specified.  Type -help for a more complete list of 
+ options, or -doc for full documentation.  Default output is to display only.
+EOM
+   exit
+ 
+else
+
+      if (("$1" == '-help') || ("$1" == '-doc')) then 
+
+more << EOH
+ Simple Usage: 
+ 
+ multplot [-start time][-end time | -dur time][-rate rate][-repeat num]
+          [-scatter][-grid][-cols xcol ycol][-xlab xlabel][-ylab ylabel] 
+          [-overlay col1 col2][-title title][-caption text][-zoom num]
+          [-lpr][-nodisp][-outdat filehead][-ps filehead][-help][-doc]
+          [-dbkey keyword][-pscript filename|null][-dscript filename]
+          [-indat filename][-vars var1 [var2 ...]]
+          [-swapendian]
+
+ Where -vars must be the last argument and variable names are used for axes 
+ labels if no labels are specified.  Type -help for a more complete list of 
+ options, or -doc for full documentation.  Default output is to display only.
+
+ ---------------------------------------------------------------------------
+
+ The complete usage options are:
+
+ multplot [option list]
+
+ where the valid options and argument types are (by category):
+ (see -doc for more general use details)
+
+   Argument      Arg_Type    Default              Description
+   --------      --------    -------              -----------
+ script handling options:
+   -dbkey        keyword      (none)              database keyword 
+   -dbarch       filename     db_archive          database archive file
+   -dscript      filename     (none)              data extraction script
+   -pscript      filename     (none)              plotl plot script 
+   -hscript      filename     (none)              pre-pended to plot script
+   -ascript      filename     (none)              appended to plot script
+   -dbarch_dir   directory    ~/gse_utils/misc        default directory
+   -dscript_dir  directory    ~/gse_utils/d_scripts   default directory
+   -pscript_dir  directory    ~/gse_utils/p_scripts   default directory
+   -nodefdir     (none)       (none)              do not to use def. dirs.
+
+ data extraction options:
+   -start        gmt_time     (none)              start time for extraction
+   -end          gmt_time     (none)              end time for extraction
+   -dur          gmt_time     000/01:30:00        duration of extraction cycle
+   -repeat       integer      1                   number of repeat cycles
+   -rate         real_num     1                   extraction rate (Hz.)
+   -vars         variables    (none)              variables to extract
+   -min          (none)       (none)              use gse minimum [_rate]
+   -max          (none)       (none)              use gse maximum [^rate]
+   -avg          (none)       (none)              use gse average [+rate]
+   -tcm_off      real_num     0.0                 tcm_offset to use
+   -indat        filename     (none)              input data filename 
+   -outdat       filehead     (none)              data file header
+ 
+ plot definition options:
+   -cols         xcol ycol    0 1                 data columns to plot
+   -overlay      col1 col2    1 1                 columns to overlay vs time 
+   -xdim         real_num     (variable)          x plot dimension
+   -ydim         real_num     (variable)          y plot dimension
+   -sh_origin    x_sh y_sh    0.0 0.0             x and y shifts in inches
+   -xrange       xmin xmax    auto auto           min and max ranges of data
+   -yrange       ymin ymax    auto auto           min and max ranges of data
+   -yrange2      ymin ymax    auto auto           min and max ranges of data
+   -grid         (none)       (none)              grid is off by default
+   -logx         (none)       (none)              logarithmic x axis 
+   -logy         (none)       (none)              logarithmic y axis 
+   -decim        integer      1                   plot every nth point
+   -zoom         real_num     1.0                 zoom factor (num > 0)
+   -rotate       type         landscape           portrait or landscape
+   -scatter      (none)       (none)              scatter plot turned on
+   -scat_snum    integer      1                   symbol number
+   -scat_ssize   inches       0.01                symbol size (inches)
+   -scat_connect (none)       (none)              connect scatter plot symbols
+   -pen          integer      2                   pen thickness (multiples 
+                                                       of 1/300th inch)
+
+ plot annotation options:
+   -title        'text'       (none)              title text
+   -title_size   inches       0.18                size of title text (inches)
+   -caption      'text'       (none)              caption text
+   -cap_skip     inches       0.7                 skip up from caption start 
+   -cap_tsize    inches       0.14                size of caption text (inches)
+   -cap_width    inches       xdim                width of caption text block
+   -cap_indent   inches       0.0                 caption indent from plot edge
+   -xlab         'text'       GMT                 x axis label
+   -ylab         'text'       (variable name)     y axis label
+   -ylab2        'text'       (variable name)     overlayed y axis label
+   -nodate       (none)       (none)              do not date graph
+   -noxhms       (none)       (none)              disable use of GMT format
+   -xhms         (none)       (none)              force xhms
+
+ output handling options:
+   -orient       type         landscape           portrait or landscape
+   -ps           filehead     (none)              plot file header
+   -eps          (none)       (none)              plot file header
+   -nodisp       (none)       (none)              do not display (batch mode)
+   -lpr          (none)       (none)              print plot to \$PRINTER
+   -test         (none)       (none)              comments - no data/plotting 
+   -vf           (none)       (none)              run plotl in verbose mode
+
+   -swapendian   (none)       (none)              swap endian in values
+EOH
+   
+   if ("$1" == '-doc') then
+
+more << EOD
+
+  *************************************************************************
+  * [Disclaimer:  This is a personal utility developed to help me in my   *
+  * dissertation work involving the use of tabular data.  It is available * 
+  * for use by SETS team members, but was not written for distribution.   *
+  * Please use it freely and feel free to ask me any questions, but I     *
+  * request that it not be distributed without my consultation.           *
+  *                                                                       *
+  * I will support this code on a time available basis.  NOTE:  It is not *
+  * meant as a replacement for the SETS tool striptab or for other plot   *
+  * packages (in this case I use plotl - Don Thompson's plotting package).*
+  * It is not a finished product and never was intended to be.  I update  *
+  * it frequently for personal purposes, but I only release new versions  *
+  * when they have been reasonably tested or have significant added       *
+  * functionality.  Copy and modify at your own risk; but if you do not   *
+  * make major changes, please leave this disclaimer in the code and      *
+  * document whatever changes you do make.       --Victor M. Aguero]      *
+  *************************************************************************
+
+  The following is an attempt to document general notes about multplot 
+  capabilities and defaults.  The first section deals with option flags,
+  the defaults, and descriptions.  The second section deals with more 
+  general usage comments and examples of not so obvious uses of multplot.
+
+  Any specified arguments override their default values, with the 
+  following order of precedence or rules of assignment applying:
+
+  * an input data file overrides any data extraction script
+  * a repeat count overrides an extraction duration or end time, and if
+      an end time is specified, his is used to get a duration which is
+      repeated "repeat count" times
+  * a -dur option overrides a duration based on an extraction end time
+  * an extraction end time overrides the default duration of 1 hr. 30 minutes
+  * a data or plot script overrides a database data or plot script
+  * a data extraction rate overrides a database default extraction rate
+  * a data script overrides command line extraction variable names
+  * a directory specification overrides the default directory specification
+  * -nodefdir results in no directory being prepended to any filenames
+  * a tcm_offset is passed along to the data script only if provided
+  * if only one of -rotate or -orient is used, the other is set to match
+  * a database filename overrides the default database file name
+
+  Additional Notes about options (by category):
+
+  script handling:
+
+  The -ascript option allows the specification of a plotl script to be
+  appended at the end of the -pscript or internally created plot script.
+  No assumptions are made, and the user must beware.  This can be used 
+  to override all multplot specifications by using the "null" plot option
+  as the plot script (ie. -pscript null).  
+
+  When using the -hscript argument, the user must beware of the fact that 
+  no multplot sets will have been carried out when the header script is 
+  executed by plotl.  As a result, plotl commands that have immediate
+  effects can have unexpected results - let the user beware!
+
+  data extraction:
+
+  Data files are assumed to contain ascii data with GMT time in column 0,
+  the first data variable in column 1, the second variable in column 2, etc.
+  The delimitor between columns is assumed to be any number of spaces or
+  whatever plotl accepts as delimitors (ask Don Thompson about this and 
+  acceptable number formats).
+
+  The standard SETS GSE variable nomenclature prefixes can be used, but 
+  not the bracket enclosed suffixes (ie. \$stream\*%variable is acceptable,
+  but %variable[+2] is not acceptable).  Rates and functions to be
+  applied to the data must be specified using the command line flags.
+  Until I fix the bug, you need a "\" in front of the "\$" in the stream
+  names.
+ 
+  multplot makes use of multext (also written by myself), which automatically
+  throws out data with a bad checksum.  Only telemetry pages with a zero 
+  \$sets*CHECKSUM value are passed along.
+
+  A null data extraction option is possible by using -dscript with reference
+  to an extraction script that does nothing.  The plot script must then 
+  acquire its own data somehow or point directly to an existing datafile.
+  Similarly a blank input data file can be specified using the -indat option.
+
+  plot definition:
+
+  The plot origin is always moved to the following locations before a user
+  plot script is called, depending on whether it is landscape or portrait:
+  landscape:  x = 0.5  y = 1.3        portrait:  x = 0.5  y = 0.7
+  
+  Normal plots are line plots, overlayed plots use a dashed line for the 
+  overlayed variable, and scatter plots default to unconnected points.
+
+  multplot assumes the first data file column has a GMT format time; but 
+  this need not be the case.  The -noxhms option allows the plotting of
+  non-time variables as on the x-axis, or use of non-GMT time formats.
+  plot annotation:
+
+  A  date is normally added 0.5 inches above the top of the plot region, 
+  flush with the right edge of the plot, and with a text size of 0.1 inches.
+  The -nodate overrides this feature.
+
+  The overlay dashed line dash size is 0.05 in.
+
+  output handling:
+
+  The default action for multplot is to display each graph on the screen
+  as it is generated.  There is no need for the user to interact with the
+  system to "place" the plot window, but the user must "quit" out of each 
+  plot window (type "q" in the window or exit ghostview with the pull down
+  menu option) before the next plot is created.  As a result, to run in 
+  batch (non-interactive) mode, the -nodisp and -ps options should be used
+  to disable displaying, and to save the postscript output to a file.
+
+  For error checking and debugging, the verbose flag for plotl, -vf, results
+  in plotl printing out its full verbose comments while plotting.  The -test
+  flag can be used to cause multplot itself to report its progress as it 
+  executes.  All argument specifications are reported when they are processed,
+  and the plotl file is not deleted for debugging purposes; but the data
+  extraction and actual plotl execution are not performed.  To review the 
+  actual data file contents or postscript plot files, the -outdat and -ps
+  options should be used to save the data and plot files.  The saved data
+  file will include any comment lines (containing #, and that are stripped 
+  before the data is passed to plotl).
+
+  File Name Conventions:
+ 
+  Files created by multplot for output of data and plots have an odd notation
+  that seems cumbersome, but I didn't have a better idea at the time.  Each
+  output file uses the file header provided (with -outdat or -ps) to create
+  file name that has the format:  header.pid.rcnt.extension
+
+  This format was used to allow for unique file names to be created by 
+  multiple multplot processes and to allow for multiple files when an 
+  action is repeated.  Hence, the process id (pid) is used, and the repeat
+  count is also used.  File extensions are ".dat" for data files and 
+  ".ps" for postscript files.
+
+  NOTE:
+
+  For more complicated plot capabilities, the user should learn how to use 
+  plotl or another plotting package directly.  For more complicated or 
+  involved data extraction and processing, the user should learn how to use
+  the GSE tools directly.  Multplot is intended merely as an aid for quick
+  data extraction/plotting and batch data extraction/plotting without the
+  user having to learn the idiosyncracies of other tools (such as plotl and 
+  striptab).
+
+  Examples:
+
+  Two interesting uses of multplot involve data extraction (with no plotting)
+  and event handling (the repeated processing of specified data periods in 
+  the same fashion - extraction or plotting).  The following are examples of
+  how this can be accomplished:
+
+  Data extraction:  data extraction without plotting can be handled by
+  direct use of the utility multext (used by multplot), but multext pipes
+  its output to stdout with no processing (except throwing away of bad 
+  data as determined by the checksum).  To send data to files or to pass 
+  it through a data processing script use multplot.  To process 5 minute 
+  periods of tether current and voltage for part of the deployed phase of
+  the mission, one could use the command syntax:
+
+  multplot -start 217/22:58:00 -dur 000/00:05:00 -outdat date_15_min \\
+     -repeat 6 -rate 24 -nodisp -vars %tvmdc %tcm &
+
+  To review the plot of each interval with the tether voltage and current
+  overlayed on the same plot, try:
+
+  multplot -start 217/22:58:00 -dur 000/00:05:00 -outdat date_15_min \\
+     -yrange2 -0.001 0.02 -repeat 6 -rate 24 -overlay 1 2 \\
+     -ylab '%tvmdc (solid)' -ylab2 '%tcm (dashed)' -title 'Sample Plots' \\
+     -vars %tvmdc %tcm &
+
+
+  Event processing:  Events such as JFO2/DEP1s can be processed automatically
+  using a file that contains start times for each event (with one time per 
+  line).  In this example a local plot script is used with a foreach loop 
+  to plot a series of events contained in the file "events.file":
+
+  foreach start_time (\`cat events.file\`)
+  ? multplot -pscript test.plot -nodefdir -lpr -nodisp -ps myplots \\
+     -start "\$start_time" -dur 000/00:04:40 -rate 120 -vars %tvmdc360
+  ? end
+
+  Definition of Scripts:
+
+  Plot scripts should conform to plotl usage - ask Don Thompson for 
+  questions regarding this and examples.
+
+  Data scripts should be written to handle usage of the form:
+
+  script_name -start gmt_time -end gmt_time [-rate number] [-tcm_off number]
+
+  where the tcm_offset is not assumed to be necessary (and effectively is 
+  zero if not provided); and the rate defaults to some value if not provided.
+  Output should be piped to stdout or sent to a file that is directly referred
+  to by the plotl script being used (multplot assumes stdout).
+
+  Plot scripts should be written so that a file name is not hardcoded, since 
+  multplot specifies a data file to plotl on the plotl command line.  Hence,
+  the plot file should set up the plot and do what ever plotl processing is 
+  needed; but sould not list specific data files, unless they have been 
+  created by the user specified data extraction script.
+
+  Final Random Comments:
+
+  (The database capabilites are documented in the code and were for personal
+  use, so I have not documented them further.  See comment codes if you 
+  wish to explore this.  There is no added functionality over the use of
+  the -dscript and -pscript options, just a shortening of notation since only 
+  one keyword can specify the data script, plot script, extraction rate, and
+  plot orientation.)
+  
+  The most important functions of multplot are the abilities to:
+  
+  1) extract and plot variables with a simple command line structure 
+     overlaying up to two at a time without knowledge of the GSE tools
+     or plot utilities,
+  2) plot any 2 or 3 given columns from a data file,
+  3) use user defined data extraction and plot scripts with a simple 
+     command line syntax, and
+  4) simplify the batch processing of either data extraction
+     or plot creation.
+
+  Please read the documentation carefully before asking questions, and 
+  if there is a capability that you really think would be useful, I might 
+  consider adding it if I don't think it should be handled by you writing 
+  your own plotl script.    --Victor M. Aguero
+
+EOD
+      exit
+      
+      else 
+ 
+      exit
+
+    endif
+
+   endif
+
+endif
+
+#default settings
+
+# Definition of data Source 
+
+# setting for data extraction using SETS striptab
+set dbkey = ''                         # database keyword
+set dbarch_dir = ~/gse_utils/misc          # database default direcrory
+set dbarch = 'db_archive'              # database default file
+set dscript_dir = ~/gse_utils/d_scripts    # default data scripts directory
+set dscr = ''                          # data script
+set start = ''                         # data extraction start time
+set end = ''                           # data extraction end time
+set dur = ''                           # data extraction duration
+set def_dur = '000/01:30:00'           # default duration
+set dur_vec = `time2tvec "$def_dur"`   # duration vector
+set rate = 1                           # extraction rate
+set repeat = 1                         # repeat count
+set afunc = ''                        # function to be applied
+set swapendian = 1 
+
+# specifications for data source being an existing data file
+set dat_file = 'temp.'"$$"             # input data file name
+set decim = 1                          # data file decimation rate
+set in_dat = ''                        # input data file argument
+
+# Post Extraction Processing
+
+# TCM offset correction
+set tcm_offset = '0'                   # TCM offset to be added to signal
+set tcmoff = '0'                       # TCM offset flag
+
+# Plot Setup
+
+# plot script specifications
+# added by NV ---- BEGIN
+set hist = 0                           # if hist then 'hist' else 'plot'
+# added by NV ---- END
+set pscript_dir = ~/gse_utils/p_scripts    # default directory for plot scripts
+set pscr = ''                          # pre-existing plot script to use
+set ascr = ''                          # plot script to append at end
+set hscr = ''                          # plot script to append at head
+set plotrot = ''                       # generate plot rotated
+set title = ''                         # plot title
+set xcol = 0                           # x column to use from data file
+set ycol = 1                           # y column to use from data file
+set ycol2 = 1                          # y column to use for overlay
+set overlayflag = 0                    # default to no overlay
+set ylab2 = ''                         # label for second axis
+set scatter = 0                        # scatter plot vs time plot
+set scat_symnum = 1                    # set default scatter symbol (dot)
+set scat_symsize = 0.01                # set default scatter symbol size
+set scat_connect = 'noconnect'         # default scatter plots to noconnect
+set xlab = ''                          # x-axis label
+set ylab = ''                          # y-axis label
+set xmin = 'auto'                      # autoscale xmin
+set xmax = 'auto'                      # autoscale xmax
+set ymin = 'auto'                      # autoscale ymin
+set ymax = 'auto'                      # autoscale ymax
+set ymin2 = 'auto'                     # autoscale ymin
+set ymax2 = 'auto'                     # autoscale ymax
+set xdlt  = ''                         # delta ranges for x
+set ydlt  = ''                         # delta ranges for y
+set ydlt2 = ''                         # delta ranges for y2
+set yflag = 0                          # was y-label given flag
+set yflag2 = 0                         # was y-label given flag
+set xflag = 0                          # was x-label given flag
+set date = 1                           # date the plot or not
+set caption = ''                       # add a caption
+set cap_width = '$xdim'                # caption with to plot width
+set cap_indent = '0.0'                 # indent caption 0.0 inches
+set cap_skip = '0.9'                   # skip up 0.9 inches after caption 
+                                       # tested out, given origin shifts
+set cap_tsize = '0.14'                 # default caption size
+set zoom = '1.0'                       # amount to zoom in on the plot
+set gridflag = 0                       # set no grid by default
+set logxflag = 0                       # x defaults to not log
+set logyflag = 0                       # y defaults to not log
+set pen = 2                            # set default pen size
+set title_size = '0.18'                # set default title size
+set xdim = ''                          # default set below if not an arg.
+set ydim = ''                          # default set below if not an arg.
+set sh_xorig = '0.0'                   # default origin shift
+set sh_yorig = '0.0'                   # default origin shift
+set xhmsflag = 1                       # default to GMT format for x axis
+
+
+# plot handling
+set ps_file = 'temp.'"$$"              # default plot output file name
+set print = 0                          # flag on whether to print plot
+set disp = 1                           # flag on whether to display plot
+set orient = ''                        # plot display orientation
+set epsflag = 0                        # default to ps not eps
+
+# Other Setups
+set rate_given = 0                     # assume rate not given by user
+set values = ''                        # array of variable names
+set testflag = 0                       # flag indicating a test only 
+                                       # (status messages only, no plot or
+                                       # data commands executed)
+set vflag = '-q'                       # flag to run plotl quiet by default
+set defdirflag = 1                     # use defualt dir defs for filenames
+
+#now read in command line arguments
+
+set no_args = $#argv
+set cnt = 1
+
+while ($no_args >= $cnt )
+
+switch ("$argv[$cnt]")
+case '-test':
+          set testflag = 1
+          breaksw
+case '-eps':
+          set epsflag = 1
+          breaksw
+case '-vf':
+          set vflag = '-v'
+          breaksw
+case '-noxhms':
+          set xhmsflag = 0
+          breaksw
+case '-xhms':
+          set xhmsflag = 1
+          breaksw
+case '-yhms':
+          set yhmsflag = 1
+          breaksw
+case '-nodisp':
+          set disp = 0
+          breaksw          
+case '-nodate':
+          set date = 0
+          breaksw
+case '-lpr':
+          set print = 1
+          breaksw
+case '-grid':
+          set gridflag = 1
+          breaksw
+case '-logx':
+          set logxflag = 1
+          breaksw
+case '-logy':
+          set logyflag = 1
+          breaksw
+case '-pen':
+          @ cnt++
+          set pen = "$argv[$cnt]"
+          breaksw
+case '-xdim':
+          @ cnt++
+          set xdim = "$argv[$cnt]"
+          breaksw
+case '-ydim':
+          @ cnt++
+          set ydim = "$argv[$cnt]"
+          breaksw
+case '-sh_origin':
+          @ cnt++
+          set sh_xorig = "$argv[$cnt]"
+          @ cnt++
+          set sh_yorig = "$argv[$cnt]"
+          breaksw
+case '-outdat':
+          @ cnt++
+          set dat_file = "$argv[$cnt]"'.'"$$"
+          breaksw
+case '-indat':
+          @ cnt++
+          set in_dat = "$argv[$cnt]"
+          breaksw
+case '-decim':
+          @ cnt++
+          set decim = "$argv[$cnt]"
+          breaksw
+case '-dbkey':
+          @ cnt++
+          set dbkey = "$argv[$cnt]"
+          breaksw
+case '-dbarch':
+          @ cnt++
+          # don't put quotes around these file names so they are expanded
+          set dbarch = $argv[$cnt]
+          breaksw
+case '-dbarch_dir':
+          @ cnt++
+          set dbarch_dir = $argv[$cnt]
+          breaksw
+case '-dscript_dir':
+          @ cnt++
+          set dscript_dir = $argv[$cnt]
+          breaksw
+case '-pscript_dir':
+          @ cnt++
+          set pscript_dir = $argv[$cnt]
+          breaksw
+case '-nodefdir':
+          set defdirflag = 0
+          breaksw
+case '-dscript':
+          @ cnt++
+          set dscr = $argv[$cnt]
+          breaksw
+case '-pscript':
+          @ cnt++
+          set pscr = $argv[$cnt]
+          breaksw
+case '-ascript':
+          @ cnt++
+          set ascr = $argv[$cnt]
+          breaksw
+case '-hscript':
+          @ cnt++
+          set hscr = $argv[$cnt]
+          breaksw
+case '-ps':
+          @ cnt++
+          set ps_file = "$argv[$cnt]"'.'"$$"
+          breaksw
+case '-zoom':
+          @ cnt++
+          set zoom = "$argv[$cnt]"
+          breaksw
+case '-xrange':
+          @ cnt++
+          set xmin = "$argv[$cnt]"
+          @ cnt++
+          set xmax = "$argv[$cnt]"
+          set xflag = 1
+          breaksw
+case '-yrange':
+          @ cnt++
+          set ymin = "$argv[$cnt]"
+          @ cnt++
+          set ymax = "$argv[$cnt]"
+          set yflag = 1
+          breaksw
+case '-yrange2':
+          @ cnt++
+          set ymin2 = "$argv[$cnt]"
+          @ cnt++
+          set ymax2 = "$argv[$cnt]"
+          set yflag2 = 1
+          breaksw
+case '-xdelta':
+          @ cnt++
+	  set xdlt  = "$argv[$cnt]"
+          @ cnt++
+	  set xdlt  = "$xdlt"' '"$argv[$cnt]"
+          breaksw
+case '-ydelta':
+          @ cnt++
+	  set ydlt  = "$argv[$cnt]"
+          @ cnt++
+	  set ydlt  = "$ydlt"' '"$argv[$cnt]"
+          breaksw
+case '-ydelta2':
+          @ cnt++
+	  set ydlt2 = "$argv[$cnt]"
+          @ cnt++
+	  set ydlt2 = "$ydlt2"' '"$argv[$cnt]"
+          breaksw
+case '-title':
+          @ cnt++
+          set title = "$argv[$cnt]"
+          breaksw
+case '-title_size':
+          @ cnt++
+          set title_size = "$argv[$cnt]"
+          breaksw
+case '-caption':
+          @ cnt++
+          set caption = "$argv[$cnt]"
+          breaksw
+case '-cap_skip':
+          @ cnt++
+          set cap_skip = "$argv[$cnt]"
+          breaksw
+case '-cap_tsize':
+          @ cnt++
+          set cap_tsize = "$argv[$cnt]"
+          breaksw
+case '-cap_width':
+          @ cnt++
+          set cap_width = "$argv[$cnt]"
+          breaksw
+case '-cap_indent':
+          @ cnt++
+          set cap_indent = "$argv[$cnt]"
+          breaksw
+case '-orient':
+          @ cnt++
+          set orient = "$argv[$cnt]"
+          breaksw
+case '-rotate':
+          @ cnt++
+          set plotrot = "$argv[$cnt]"
+          breaksw
+case '-xlab':
+          @ cnt++
+          set xlab = "$argv[$cnt]"
+          breaksw
+case '-ylab':
+          @ cnt++
+          set ylab = "$argv[$cnt]"
+          breaksw
+case '-ylab2':
+          @ cnt++
+          set ylab2 = "$argv[$cnt]"
+          breaksw
+case '-min':
+          set afunc = '-min'
+          breaksw
+case '-max':
+          set afunc = '-max'
+          breaksw
+case '-avg':
+          set afunc = '-avg'
+          breaksw
+case '-tcm_off':
+          @ cnt++
+          set tcm_offset = "$argv[$cnt]"
+          set tcmoff = '1'
+          breaksw
+case '-repeat':
+          @ cnt++
+          set repeat = "$argv[$cnt]"
+          breaksw
+case '-rate':
+          @ cnt++
+          set rate = "$argv[$cnt]"
+          set rate_given = '1'
+          breaksw
+case '-dur':
+          @ cnt++
+          # The following three time arguments are passed through
+          # the time utilities to expand out incomplete times
+          set dur = `time2tvec "$argv[$cnt]" | tvec2time`
+          breaksw
+case '-end':
+          @ cnt++
+          set end = `time2tvec "$argv[$cnt]" | tvec2time`
+          breaksw
+case '-start':
+          @ cnt++
+          set start = `time2tvec "$argv[$cnt]" | tvec2time`
+          breaksw
+case '-scatter':
+          set scatter = 1
+          breaksw
+case '-scat_snum':
+          @ cnt++
+          set scat_symnum = "$argv[$cnt]"
+          breaksw
+case '-scat_ssize':
+          @ cnt++
+          set scat_symsize = "$argv[$cnt]"
+          breaksw
+case '-scat_connect':
+          set scat_connect = "$argv[$cnt]"
+          breaksw
+case '-cols':
+          @ cnt++
+          set xcol = "$argv[$cnt]"
+          @ cnt++
+          set ycol = "$argv[$cnt]"
+          breaksw
+case '-overlay':
+          @ cnt++
+          set ycol = "$argv[$cnt]"
+          @ cnt++
+          set ycol2 = "$argv[$cnt]"
+          set overlayflag = 1
+          breaksw
+# added by NV ---- BEGIN
+case '-hist':
+          set hist = 1
+          breaksw
+case '-swapendian':
+          set swapendian = 1
+          breaksw
+# added by NV ---- END
+case '-vars':
+          @ cnt++
+# -vars is last so that it is easy to find no. of vars to read
+          while ( $cnt <= $no_args )
+          set values = ("$values" "$argv[$cnt]")
+#          set values = ("$values" "'""$argv[$cnt]""'")
+#          the commented out line was done this way at one time due to
+#          possible caharacters like "[" and "]" showing up in var names,
+#          by by requiring the rate to be specified using -rate, this 
+#          is no longer a problem.  Removing these quotes, gets rid of 
+#          the problem of single quotes showing up arounf variable names
+#          which occurs when the single quotes are put in here. 
+#          Do not remove this comment so I don't forget.  
+          @ cnt++
+          end          
+          @ cnt--
+          breaksw
+case ' ':
+          breaksw
+default:
+          echo ' '
+          echo ' Parameter Error ['"$argv[$cnt]"'] - type "multplot" for usage'
+          echo ' '
+          exit(1)
+endsw
+
+@ cnt = $cnt + 1
+
+end
+
+if ($testflag) echo 'test: checking validity of inputs'
+
+# check to see if an input mechanism has been provided: must be either
+# a keyword, a data extraction script name, a data file, or variables
+
+if ( (("$values" == '') || ("$start" == '')) && ("$in_dat" == '') && ("$dbkey" == '') && ("$dscr" == '')) then
+echo ' '
+echo ' Invalid Arguments - must give input mechanism or vars and start time.'
+echo ' '
+exit(1)
+endif
+
+# check to make more then one variable is setup when doing an overlay
+# could also check that specified columns make sense, but a hassle
+
+if ( ($overlayflag) && ("$in_dat" == '') && ("$dscr" == '') && ("$dbkey" == '') && (`echo "$values" | wc -w` < 2) ) then
+echo 'Error - Need to specify more than one variable to do an overlay.'
+echo ' '
+exit(1)
+endif
+
+if ($testflag) echo 'test: All arguments handled, beginning setups'
+
+# If a database keyword is provided, and no data or plot scripts 
+# are given, set the data and plot scripts given in the data base;
+# also set display and plot orientation.
+
+# Database layout is space separated fields as follows:
+# Field:   1         2         3         4         5        6          7
+#       keyword   data_scr  plot_scr  TCM_off     rate disp_orient plot_orient 
+#    example_key  test.sh   test.plot   0.0        1    portrait    landscape
+
+if ("$dbkey" != '') then
+
+   # make sure we have a full path associated with the file
+   if (("$dbarch" !~ /*) && ($defdirflag)) then
+      set dbarch = "$dbarch_dir"'/'"$dbarch"
+   endif
+
+   if ("$dscr" == '') then 
+      set dscr = \
+        `\grep "$dbkey" $dbarch | gawk -v fld=2 '{print $fld}' | head -1`
+      if ("$dscr" == '') then
+         echo ' Data Extraction Script not found in archive for keyword '
+         echo ' '
+         exit
+      endif
+   endif
+
+   if ("$pscr" == '') then
+      set pscr = \
+        `\grep "$dbkey" $dbarch | gawk -v fld=3 '{print $fld}' | head -1`
+      if ("$pscr" == '') then
+         echo ' Plot Script not found in archive for keyword '
+         echo ' '
+         exit
+      endif
+   endif
+
+   # if the rate is 1 and the rate was not given by the user, see if
+   # there is a default rate that we can use from the database
+   if ("$rate" == '1' && (! $rate_given)) then
+      set rate = \
+        `\grep "$dbkey" $dbarch | gawk -v fld=4 '{print $fld}' | head -1`
+      if ("$rate" == ' ') then
+         echo ' Default rate not found in archive for keyword '
+         echo ' '
+         exit
+      endif
+   endif
+
+   if ("$orient" == '') then
+      set orient = \
+        `\grep "$dbkey" $dbarch | gawk -v fld=6 '{print $fld}' | head -1`
+      if ("$orient" == '') set orient = 'landscape'
+   endif
+
+   if ("$plotrot" == '') then
+      set plotrot = \
+        `\grep "$dbkey" $dbarch | gawk -v fld=7 '{print $fld}' | head -1`
+      if ("$plotrot" == '') set plotrot = 'landscape'
+   endif
+
+endif
+
+# Now test all the files that might have been assigned and 
+# make sure the paths are complete and files exist.
+# Note: only do if the spec is not blank!  Leave blank if blank.
+
+
+if ("$dscr" != '') then
+   if (("$dscr" !~ /*) && ($defdirflag)) set dscr = "$dscript_dir"'/'"$dscr"
+   if (("$dscr" != '') && (! -f $dscr)) then
+      echo 'File does not exist: '"$dscr"
+      exit
+   endif
+endif
+
+if ("$pscr" != '') then
+   if (("$pscr" !~ /*) && ($defdirflag)) set pscr = "$pscript_dir"'/'"$pscr"
+   if (("$pscr" != '') && (! -f $pscr)) then
+      echo 'File does not exist: '"$pscr"
+      exit
+   endif
+endif
+
+if ("$hscr" != '') then
+   if (("$hscr" !~ /*) && ($defdirflag)) set hscr = "$pscript_dir"'/'"$hscr"
+   if (("$hscr" != '') && (! -f $hscr)) then
+      echo 'File does not exist: '"$hscr"
+      exit
+   endif
+endif
+
+if ("$ascr" != '') then
+   if (("$ascr" !~ /*) && ($defdirflag)) set ascr = "$pscript_dir"'/'"$ascr"
+   if (("$ascr" != '') && (! -f $ascr)) then
+      echo 'File does not exist: '"$ascr"
+      exit
+   endif
+endif
+   
+if ($testflag) then
+
+   echo 'test: results after processing bdkey - '"$dbkey"
+   echo 'test: data script  : '"$dscr"
+   echo 'test: plot script  : '"$pscr"
+   echo 'test: orientation  : '"$orient"
+   echo 'test: plot rotation: '"$plotrot"
+   # add other inputs to check here
+
+endif
+
+###########################################################################
+#   Set up plot specifications to feed the appropriate plotting package   #
+#                   (only plotl is used at this time)                     #
+###########################################################################
+
+# First make sure the defaults are set: 
+
+# These are used elsewhere, so we need to do these outside the if statement
+if (("$plotrot" == '') && ("$orient" == '')) then
+   set plotrot = 'landscape'
+   set orient  = 'landscape'
+else 
+   # if only one of them is set, set the other to match
+   if ("$plotrot" == '') set plotrot = "$orient"   
+   if ("$orient" == '') set orient = "$plotrot"
+endif
+
+# define the file name of the plost script we will pass to plotl
+set plotscr = 'my.'"$$"'.plot'
+
+# Now set up a script to pass to the plotting utility
+if ("$pscr" == 'null') then
+
+   # create a script with only a quit command
+   echo 'quit' > $plotscr
+
+else 
+
+   # set up size defaults for portrait and landscape plots
+   set l_xorig = '6.2'     # default x origin
+   set l_yorig = '0.5'     # default y origin
+   set l_xdim = '8.5'      # default x plot dimension
+   set l2_xdim = '8.0'     # default x dim if overlay
+   set l_ydim = '6.0'      # default y plot dimension
+   set lc_ydim = '5.0'     # default y plot dimension w/caption
+
+   set p_xorig = '0.5'     # default x origin
+   set p_yorig = '0.7'     # default y origin
+   set p_xdim = '6.0'      # default x plot dimension
+   set p2_xdim = '5.5'     # default x dim if overlay
+   set p_ydim = '8.0'      # default y plot dimension
+   set pc_ydim = '7.0'     # default y plot dimension w/caption
+
+   # now see if xdim/ydim, set the xdim and ydim if not specified on the 
+   # command line
+
+   if ("$xdim" == '') then
+       if ("$plotrot" == 'portrait') then
+          set xdim = "$p_xdim"
+          if ($overlayflag) set xdim = "$p2_xdim"
+       else
+          set xdim = "$l_xdim"
+          if ($overlayflag) set xdim = "$l2_xdim"
+       endif
+   endif
+ 
+   if ("$ydim" == '') then
+       if ("$plotrot" == 'portrait') then
+          if ("$caption" == '') then
+             set ydim = "$p_ydim"
+          else
+             set ydim = "$pc_ydim"
+          endif
+       else
+          if ("$caption" == '') then
+             set ydim = "$l_ydim"
+          else
+             set ydim = "$lc_ydim"
+          endif
+       endif
+   endif
+
+   # Now set the plot origin values to the defaults
+
+   if ("$plotrot" == 'portrait') then
+      set pl_xorig = "$p_xorig"
+   else
+      set pl_xorig = "$l_xorig"
+   endif
+
+   if ("$plotrot" == 'portrait') then
+      set pl_yorig = "$p_yorig"
+   else
+      set pl_yorig = "$l_yorig"
+   endif
+
+   # Now use the provided plot script or build one
+   if ("$pscr" == '') then
+
+      # none provided, so construct a script
+      if ($testflag) echo 'test: No plot script provided, so constructing one'
+
+      # first append the user header script.  Note that nothing will 
+      # have been specified to plotl ahead of this, so orientation, etc.
+      # will all be the default.  User must be careful!!!!
+      if ("$hscr" != '') then
+          cat $hscr > $plotscr
+          echo '! This is the end of the user header script' >> $plotscr
+          echo 'nofastread' >> $plotscr
+          echo ' ' >> $plotscr
+      else
+          echo 'nofastread' > $plotscr
+          echo ' ' >> $plotscr
+      endif
+
+      if ($swapendian) then
+          echo 'swapendian' >> $plotscr
+      endif
+
+      # set the zoom to apply as a multiplies to plot specification
+      if ("$zoom" != '1.0') echo 'zoom '"$zoom" >> $plotscr
+
+      # if a scatter plot, then setup a generic scatter plot
+      if ($scatter) then
+         echo "$scat_connect"   >> $plotscr
+         echo 'symbolnumber '"$scat_symnum" >> $plotscr
+         echo 'symbolsize '"$scat_symsize" >> $plotscr
+      endif
+
+      # set plot origin - Has to be before the rotate below
+      echo 'origin '"$pl_xorig"' '"$pl_yorig" >> $plotscr
+
+      if ("$plotrot" == 'landscape') then
+         echo 'rotate 90' >> $plotscr
+      endif
+
+      echo 'ynumberangle 270' >> $plotscr
+
+      # new before we set the plot size, add the origin shift for the
+      # user relative to the default origin
+      echo 'origin '"$sh_xorig"' '"$sh_yorig" >> $plotscr
+      echo 'xdim '"$xdim" >> $plotscr
+      echo 'ydim '"$ydim" >> $plotscr
+
+      # set pen thickness
+      echo 'penthickness '"$pen" >> $plotscr
+
+      # set axis type to log for x or y if desired
+      if ($logxflag) echo 'xlog' >> $plotscr
+      if ($logyflag) echo 'ylog' >> $plotscr
+
+      if ($gridflag) then
+         echo 'grid' >> $plotscr
+      endif
+
+      echo 'ynumberplace right' >> $plotscr
+
+      # if xcol = 0, use 'GMT' as a label; else, if xlab provided use
+      # the provided value, else use the variable name
+
+      # modified to allow user to override 'GMT' even for xcol = 0
+      # also modified to allow xhms even if xcol is not 0
+
+      if ($xcol == 0) then
+         if ($xhmsflag) echo 'xhms'    >> $plotscr
+         if ("$xlab" == '') then
+            echo 'xlab GMT'   >> $plotscr
+         else
+            echo 'xlab '"$xlab"   >> $plotscr
+         endif
+      else
+         if ($xhmsflag) echo 'xhms'    >> $plotscr
+         if ("$xlab" == '') then
+            echo "$values" | \
+            gawk -v var="$xcol" '{i = var ; print "xlab "$i}' >> $plotscr
+         else
+            echo 'xlab '"$xlab"   >> $plotscr
+         endif
+      endif
+
+      # if no ylab provided, use the variable name
+
+      if ("$ylab" == '') then
+         set ylab = \
+            `echo "$values" | gawk -v var="$ycol" '{i = var ; print $i}'`
+      endif
+
+      # if overlay, no ylabel, otherwise report ylabel
+      if ($overlayflag) then
+         echo 'noyaxes'  >> $plotscr
+         #also record the seconds ylabel
+         if ("$ylab2" == '') then
+            set ylab2 = \
+             `echo "$values" | gawk -v var="$ycol2" '{i = var ; print $i}'`
+         endif
+      else
+         echo 'ylab '"$ylab" >> $plotscr
+      endif
+
+      # Now that we have chosen the labels, increment to column pointers 
+      # since the first variable actually lies in the second file column.
+      # This is due to the fact that time is given in the first file column.
+      @ xcol++
+      @ ycol++
+      @ ycol2++
+      echo 'xcol '"$xcol"   >> $plotscr
+      echo 'ycol '"$ycol"   >> $plotscr
+
+      # now put in a caption if one is given - do before any plot
+      # is specified, so that caption is below the plot on the page
+      if ("$caption" != '') then
+         echo 'textsize '"$cap_tsize" >> $plotscr
+         echo 'rmove '"$cap_indent"' -0.5' >> $plotscr
+         echo 'textblockwidth '"$cap_width" >> $plotscr
+         echo 'textblock' >> $plotscr
+         echo "$caption" >> $plotscr
+         echo 'yorigin '"$cap_skip" >> $plotscr
+      endif
+
+      # default title is blank, so can always add in
+      echo 'textsize '"$title_size" >> $plotscr
+      echo 'title '"$title" >> $plotscr
+
+      # now add a decimate on input file 
+      echo 'plotevery '"$decim" >> $plotscr
+
+      # apply any limits requested
+      if ( $xflag ) then 
+        echo 'xmin '"$xmin" >> $plotscr
+        echo 'xmax '"$xmax" >> $plotscr
+        echo 'x={x $xmin $xmax inc}' >> $plotscr
+      endif
+
+      if ( "$xdlt" != '') then
+        echo 'xdelta '"$xdlt" >> $plotscr
+      endif
+
+      if ( $yflag ) then
+        echo 'ymin '"$ymin" >> $plotscr
+        echo 'ymax '"$ymax" >> $plotscr
+        echo 'y={y $ymin $ymax inc}' >> $plotscr
+      endif
+  
+      if ( "$ydlt" != '') then
+        echo 'ydelta '"$ydlt" >> $plotscr
+      endif
+
+      if ( $yflag || $xflag ) echo 'clip' >> $plotscr
+   
+      # this line needed at the end of the file to make the plot
+
+# removed by NV ---- BEGIN
+#     echo  'plot'           >> $plotscr
+# removed by NV ---- END
+# added by NV ---- BEGIN
+      if ($hist) then
+         echo  'hist'           >> $plotscr
+      else
+         echo  'plot'           >> $plotscr
+      endif
+# added by NV ---- END
+
+      # now if doing an overlay, finish it up before doing
+      # the date and appending anything new
+
+      if ($overlayflag) then
+         echo 'ylab '"$ylab"      >> $plotscr
+         echo 'showyaxis'         >> $plotscr
+         echo 'noxaxes'           >> $plotscr
+         echo 'yrescale'          >> $plotscr
+         echo 'ycol '"$ycol2"     >> $plotscr
+         echo 'ylab '"$ylab2"     >> $plotscr
+         echo 'ynumberplace left' >> $plotscr
+         echo 'nogrid'            >> $plotscr
+         echo 'dash 0.05'          >> $plotscr
+         if ( $yflag2 ) then
+            echo 'ymin '"$ymin2" >> $plotscr
+            echo 'ymax '"$ymax2" >> $plotscr
+            echo 'y={y $ymin $ymax inc}' >> $plotscr
+         endif
+
+         if ( "$ydlt2" != '') then
+            echo 'ydelta '"$ydlt2" >> $plotscr
+         endif
+
+         if ($yflag2) echo 'clip' >> $plotscr
+         echo 'plot'              >> $plotscr
+         echo 'showsecondyaxis'   >> $plotscr
+      endif
+
+      # now add a date to the file if requested
+      if ($date) then
+# revised by NV ---- BEGIN
+         if (-e ~/.multplot_date) then
+            source ~/.multplot_date
+         else
+            echo '! move to top right hand corner of current plot' >> $plotscr
+            echo '! then up an extra 1/2 inch of space' >> $plotscr
+            echo 'origin $xdim $ydim' >> $plotscr
+            echo 'yorigin 0.5'        >> $plotscr  # Note change in yrorigin
+            echo 'rightjustify'       >> $plotscr
+            echo 'textsize 0.1'       >> $plotscr  # Note change in textsize
+#           echo 'system echo -n "text " > cur_date'   >> $plotscr
+            echo 'system echo "text " > cur_date'   >> $plotscr
+            echo 'system date +"%d %h %y" >> cur_date' >> $plotscr
+         endif
+# revised by NV ---- END
+         echo 'commandfile cur_date'  >> $plotscr
+         echo 'system rm cur_date'    >> $plotscr
+      endif
+
+   # this is end of section for creating a script (none provided) 
+   else
+
+      # here we assume a plot script was provided by reference, and so 
+      # we add user inputs to front of file before the desired script
+   
+      # add at the beginning of a file any additional specifications 
+      # provided by the user.  NOTE: that these will not over-ride any
+      # hardcoded settings, since they are added first (unlike above
+      # when they are added at the end)  This is intentional, since it
+      # guarantees the specified plot will not have anything changed by 
+      # the multplot setups that might get put in first
+
+      # first add any header scripts that may have been requested
+      if ("$hscr" != '') then
+          cat $hscr > $plotscr
+          echo '! This is the end of the user header script
+          echo 'nofastread' >> $plotscr
+          echo ' ' >> $plotscr
+      else
+          # starting the script this way to create the file
+          echo ' ' >> $plotscr
+      endif
+
+      # add the user labels in case non are used in script 
+      if ("$xlab" != '') then
+          echo 'xlab '"$xlab" >> $plotscr
+      endif
+ 
+      if ("$ylab" != '') then
+          echo 'ylab '"$ylab" >> $plotscr
+      endif
+
+      # new before we set the plot size, add the origin shift for the
+      # user relative to the default origin - This way the user can
+      # shift a pre-defined plot and also determine the caption size
+      # These values will be overriden by script values later
+      echo 'origin '"$sh_xorig"' '"$sh_yorig" >> $plotscr
+      echo 'xdim '"$xdim" >> $plotscr
+      echo 'ydim '"$ydim" >> $plotscr
+
+      # now put in a caption if one is given
+      # may not come out in right orientation here
+          if ("$caption" != '') then
+             echo 'textsize '"$cap_tsize" >> $plotscr
+             echo 'rmove '"$cap_indent"' -0.5' >> $plotscr
+             echo 'textblockwidth '"$cap_width" >> $plotscr
+             echo 'textblock' >> $plotscr
+             echo "$caption" >> $plotscr
+             echo 'yorigin '"$cap_skip" >> $plotscr
+          endif
+
+      # now add a decimate on input file 
+      echo 'plotevery '"$decim" >> $plotscr
+
+      # now since columns are offset by 1 (since GMT time is actually 
+      # column one and variable 1 is column two), we increment the cols
+ 
+      @ xcol++
+      @ ycol++
+      echo 'xcol '"$xcol"   >> $plotscr
+      echo 'ycol '"$ycol"   >> $plotscr
+
+      # apply any limits requested
+      if ( $xflag ) then 
+        echo 'xmin '"$xmin" >> $plotscr
+        echo 'xmax '"$xmax" >> $plotscr
+        echo 'x={x $xmin $xmax inc}' >> $plotscr
+      endif
+
+      if ( $yflag ) then
+        echo 'ymin '"$ymin" >> $plotscr
+        echo 'ymax '"$ymax" >> $plotscr
+        echo 'y={y $ymin $ymax inc}' >> $plotscr
+      endif
+  
+      if ( $yflag || $xflag ) echo 'clip' >> $plotscr
+   
+      # now add the specified plot script to the script being built
+      cat $pscr >> $plotscr
+
+      # Default title is blank, so don't add if no title specified.
+      # Otherwise, title has to be added at end so that it comes out
+      # in the correct orientation.
+      if ("$title" != '') then
+         echo 'textsize '"$title_size" >> $plotscr
+         echo 'title '"$title" >> $plotscr
+      endif
+
+      # now add a date to the file if requested
+      if ($date) then
+# revised by NV ---- BEGIN
+         if (-e ~/.multplot_date) then
+            source ~/.multplot_date
+         else
+            echo '! move to top right hand corner of current plot' >> $plotscr
+            echo '! then up an extra 1/2 inch of space' >> $plotscr
+            echo 'origin $xdim $ydim' >> $plotscr
+            echo 'yorigin 0.5'        >> $plotscr  # Note change in yrorigin
+            echo 'rightjustify'       >> $plotscr
+            echo 'textsize 0.1'       >> $plotscr  # Note change in textsize
+            echo 'system echo -n "text " > cur_date'   >> $plotscr
+            echo 'system date +"%d %h %y" >> cur_date' >> $plotscr
+         endif
+# revised by NV ---- END
+         echo 'commandfile cur_date'  >> $plotscr
+         echo 'system rm cur_date'    >> $plotscr
+      endif
+
+   # end of section with provided plot script
+   endif
+
+#end of whole plot script creation section
+endif
+
+# done constructing a plot script, so now 
+# append the user requested script to the end 
+if ("$pscr" == 'null') then
+
+   # since null script, just create new one with append file
+   # (this allows one to completely override multplot specifications)
+   if ("$ascr" != '') then
+      cat $ascr > $plotscr
+   endif
+
+else
+
+   if ("$ascr" != '') then
+       cat $ascr >> $plotscr
+   endif
+
+endif
+
+
+# plot script now fully specified by $plotscr in all cases
+if ($testflag) echo 'test: done preparing plot script - '"$plotscr"
+
+if ($testflag) then
+
+   echo 'test: input data script: '"$dscr"
+   echo 'test: input plot script: '"$pscr"
+   echo 'test: input data file  : '"$in_dat"
+   echo 'test: input orientation: '"$orient"
+   echo 'test: plot rotation    : '"$plotrot"
+   echo 'test: plotl verbose flg: '"$vflag"
+   # add other check here
+
+endif
+
+########################################################################
+#       Setups for handling data loops - time incrementing setups      #
+########################################################################
+
+# Do all the time stuff only if no data file is supplied
+
+if ($testflag) then
+   echo 'test: in_dat : '"$in_dat"
+   echo 'test: start  : '"$start"
+   echo 'test: dur    : '"$dur"
+   echo 'test: dur_vec: '"$dur_vec"
+   echo 'test: end    : '"$end"
+ 
+endif
+
+if ("$in_dat" == '') then 
+
+   if ($testflag) echo 'test: beginning the time calculations'
+
+   if (("$dur" == '') && ("$end" == '')) set dur = "$def_dur"
+
+   # already checked for "end" not given, so "end" must have been given if
+   # dur is still unspecified.
+
+   if ("$dur" == '') then
+       set start_vec = `time2tvec "$start"`
+       set end_vec = `time2tvec "$end"`
+       # now set the duration in case repeat is requested
+
+       set dur = `echo $end_vec | tvec_minus $start_vec | tvec_mod | tvec2time`
+       # note - no quotes around $end_vec since needs to be a vector
+   endif 
+
+   # use the duration to set dur_vec, which is actually used for math
+   set dur_vec = `time2tvec "$dur"`
+
+   if ($testflag) then
+   
+      echo 'test: start   : '"$start"
+      echo 'test: dur vect: '"$dur_vec"
+      echo 'test: repeat  : '"$repeat"
+      echo 'test: finished setting up time parameters'   
+   endif
+
+else
+
+   set repeat = 1
+   # if input data file is provided, only one pass throught the file 
+   # is made.  Selecting (chopping) a sectin of data is done in the 
+   # plot package, and having to update the xrange in the plot script 
+   # would be a pain, and potentially do wierd things with user appended
+   # scripts, so I leave it like this.  A chop function could be added 
+   # here, but I prefer to leave it to the user to do multiple calls
+   # to multplot; updating the start time with a loop outside of multplot
+
+endif
+
+#####################################################################
+#     now ready for data acquisition if no data file specified      #
+#####################################################################
+
+# Before beginning of this section, the following setups are assumed to
+# have been completed and fully specified (no others needed):
+#
+#  Data Handling:
+#  echo $start          start time for extraction
+#  echo $dur_vec        duration of each extraction pass - vector
+#  echo $repeat         number of times to repeat data extraction loop
+#  echo $dscr|$indat    data extraction script or data file to use
+#  echo $rate           data rate to pass to extraction routine
+#  echo $afunc          function to apply to extracted data
+#  echo $values         variables to extract
+#  echo $tcm_offset     TCM offset to subtract from TCM values
+
+#  Plot Handling:
+#  echo $vflag          plotl verbose mode flag
+#  echo $epsflag        encapsulated postscript flag
+#  echo $print          print flag
+#  echo $disp           display flag
+#  echo $orient         display orientation flag
+
+# initialize loop counter
+set rcnt = 1
+
+if ("$in_dat" == '') then
+   source `which gensetup`
+   if ("$dscr" == '') set dscr = 'multext'
+endif
+# if not data file provided, need to extract data; so do generic 
+# GSE setup in case needed (this way scripts don't have to do it 
+# themselves).  Also keep out of while loop so we do only once.
+
+# carry out loop to data/plot cycles
+while ( $rcnt <= $repeat )
+
+
+   # Now "create" extraction command to be used on each 
+   # pass, if no data file if provided
+   if ( "$in_dat" == '' ) then
+   
+      # set the end time for this pass using the duration defined earlier
+      set end = `time2tvec "$start" | tvec_plus $dur_vec | tvec_mod | tvec2time`
+      # leave diagnostic here to mark start of each loop
+      if ($testflag) then
+         echo 'test: data extraction loop count: '$rcnt
+         echo 'test: data extraction start time: '$start
+         echo 'test: data extraction end time  : '$end
+         echo 'test: extraction repeat cycles  : '$repeat
+      endif
+
+
+      # setup the extraction command
+      set extcmd = ("$dscr" '-start' "$start" '-end' "$end" )
+      set extcmd = ("$extcmd" '-rate' "$rate" )
+      if ($tcmoff) set extcmd = ("$extcmd" '-tcm_off' "$tcm_offset")
+
+      if ("$dscr" == 'multext') then
+         # do extra setups that apply only to multext
+         set extcmd = ("$extcmd" "$afunc" '-vars' "$values")
+      endif
+
+      # end of extraction command setup - now actually do extraction
+
+      if ($testflag) then
+         echo "$extcmd"
+      else
+         # set data file name to be unique for each pass using rcnt
+         set datafile = "$dat_file"'.'"$rcnt"'.dat'
+         sh -c "$extcmd" >& $datafile
+
+#         echo 'extract command execution done' 
+#         if ($status) then 
+#            echo 'Error in data extraction - here is the error report:'
+#            cat  $datafile
+#            rm -f $datafile
+#            goto cleanup
+#         endif
+
+      endif
+      # now data file from the loop cycle is available if extracting 
+
+   else
+
+      # since data file give, just set pointer to input data file
+      set datafile = "$in_dat"
+
+   endif
+
+   # Now remove any comment line that might be in data file
+   # Having a "#" in the line makes the WHOLE line a comment line!
+
+   # set the new data file name
+   set tempdata = 'plot.'"$$"'.dat'
+
+   set binarified = `isbinarified -f "$datafile"`
+   if ("$binarified" == '0') then
+      if (! $testflag) then
+
+         # if not a test then do this
+         set old_grep = `alias grep`
+         alias grep 'grep -v \#'
+         grep "$datafile" > $tempdata
+       
+         # delete the data file to save space, if saving the data file
+         # has not been requested, or it is not an original input file
+         if (("$datafile" =~ 'temp.'"$$".*)&&("$in_dat" == '')) rm -f $datafile
+         if ( "$old_grep" != '' ) alias grep "$old_grep"
+      endif
+   else
+      ln -s $datafile $tempdata
+   endif
+  
+
+   ###################################### 
+   # Data available, so Now do the plot #
+   ######################################
+
+   set plotfile = "$ps_file"'.'"$rcnt"'.ps' 
+
+   if ($testflag) then
+      echo 'test: 'plotl "$plotscr" 'data '"$tempdata" "$vflag" -t -o $plotfile
+      if ($disp) echo test: ghostview -geometry +10+10 -"$orient" $plotfile
+
+   else
+
+      # ready to plot so calling plotl
+
+      plotl "$plotscr" 'data '"$tempdata" "$vflag" -t -o $plotfile
+
+      # use my rpr utility to allow printing to remote sites too.
+      #if ($print) rpr $PRINTER $plotfile
+      if ($print) lpr $plotfile
+
+      # note: this cannot be a background process, or file 
+      # can be deleted defore display actually happens
+      if ($disp) ghostview -geometry +10+10 -"$orient" $plotfile
+
+      if ($epsflag) ps2eps-mac $plotfile >& /dev/null
+      # this leaves a file with name "$plotfile".eps.bin
+
+      # clear files, always removing temporary data file,
+      # so that stuff doesn't accumulate as we loop
+
+      rm -f $tempdata
+      if ( "$plotfile" =~ temp.$$.* ) rm -f $plotfile
+
+   # end of if statement for plotting (if not a test)
+   endif
+
+   # set up for next pass through the loop
+   if ("$in_dat" == '') set start = "$end"
+
+   @ rcnt = $rcnt + 1
+
+   # echo 'rcnt incremented to: '$rcnt
+
+end
+
+   #################################################
+   # End of this repeat cycle, go back and do next #
+   #################################################
+
+endif
+
+cleanup:
+
+# If not doing a test run, then clean up all temporary files on 
+# interrupt or exit.  Otherwise leave them around for debugging.
+   
+if (! $testflag) then
+
+   # since it is possible to interrupt before this variable 
+   # is defined, check if it is defined before trying the rm.
+   if ($?plotscr)  then
+      rm -f $plotscr
+   endif
+
+   if ($?tempdata) then
+      rm -f $tempdata
+   endif 
+
+   if ( "$dscr" != '' ) clearsetup "$$"
+
+endif

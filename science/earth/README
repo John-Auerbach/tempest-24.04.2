@@ -1,0 +1,484 @@
+The earth library.
+------------------
+
+The earth library contains functions for converting between coordinate
+systems related to the earth. Moreover, a model of the earth's
+magnetic field is provided.
+
+Some familiarity with earth coordinate systems would be helpful. An
+overview is undertaken in order to clarify ambiguities, but it is by
+no means a comprehensive presentation.
+
+An important point that requires clarification is whether we are
+transforming points or vectors in our coordinate conversion routines.
+Suppose S and S' are two coordinate systems. Point transformation is
+the process whereby, given the S coordinates of a POINT, we find the
+S' coordinates. When we convert vectors, then given a DIRECTION (a
+vector) in terms of its S components (coordinates), we obtain its S'
+components. When S and S' have overlapping origins, then both the
+point and vector transformation is achieved by the same matrix.
+Otherwise, a 3x3 matrix is sufficient for vector transformation, but a
+4x4 matrix (or a 3x3 matrix AND a 3-component translation vector) is
+required for point transformation.  In the earth library, we
+frequently convert between coordinate systems with different origins.
+In these cases, you should be careful to distinguish whether we
+implement point or vector transformation.
+
+
+Rotating earth coordinate systems.
+----------------------------------
+
+Most people are familiar with the longitude, latitude, altitude method
+of representing the location of a point P on or over the earth. The C
+structure type Earth is defined to represent the location of an point
+in this form.
+
+typedef struct {
+  double Long,Lat,Alt;
+} Earth;
+
+The latitude is geodetic, STORED IN RADIANS, positive to the north,
+and ranges from -90 to 90 degrees (both ends inclusive). The longitude
+is positive towards the east, it is also stored in radians, and ranges
+from -180 (exclusive) to 180 degrees (inclusive). Altitude is given
+from sea level, in meters. It is measured by finding the point P' on
+the earth's surface (at sea level) that is closest to P. We then
+measure the distance between P and P'. Simple geometry shows that P'P
+is perpendicular to the earth ellipsoid.
+
+The geometric interpretation of latitude and longitude is a bit more
+complicated. We first extend P'P until we cross the plane of the
+equator at a point O. We set the origin of a coordinate axis system
+there. We then define axes as follows: the x axis lies on the equator
+plane, starts at O and pierces the earth at a fixed point on the
+surface (on which we axiomatically define longitude and latitude to be
+zero). The z axis is perpendicular to the equator plane, and extends
+northward. The y axis is defined on the basis of right-handedness. In
+order to find the longitude and latitude of P, we must project P'P on
+the xy plane (the equator plane). The angle between this projection
+and the x axis is the longitude. The angle between the projection and
+P'P is the latitude.
+
+An important feature of this system is that one must define where
+latitude and longitude are zero. These points are defined somewhere on
+the surface of the earth, which means that as the earth rotates in
+space, this coordinate system moves along with it. So, we will call
+this system Earth Centered Rotating (ECR) Geodetic. By this term we
+refer both the triplet (longitude,latitude,altitude), as well as the
+coordinate axes defined above.
+
+There is another coordinate system very similar to the ECR Geodetic
+one. This system is simply a right-handed three-axis system defined as
+follows: the origin is the earth's center. The x axis meets the earth
+where longitude and latitude are both zero (as above). The z axis
+pierces the earth on the north pole. The y axis is defined on the
+basis of right-handedness. Evidently, the xy plane crosses the earth
+along the equator. We usually use spherical coordinates in this
+system, and, recalling the nomenclature of spherical coordinates given
+in the math library documentation, we call Phi "geocentric
+CO-latitude". For this reason, we will call this coordinate system ECR
+Geocentric.
+
+In order to convert POINTS from one system to the other, use the
+E_ToSpherical() and E_FromSpherical() routines. The former places in
+*S the spherical ECR Geocentric coordinate representation of *E, which
+is given in ECR Geodetic. The latter effects the reverse
+transformation.
+
+void E_ToSpherical(Earth *E,Spherical *S);
+void E_FromSpherical(Spherical *S,Earth *E);
+
+There are no closed form formulas for converting from ECR Geocentric
+to ECR Geodetic coordinates. We therefore use an approximation method.
+Its precision is user-defined, via the constant
+LATITUDE_CONVERSION_ACCURACY in "user.h", but the value of this
+constant is not itself the error bound on the conversion result.
+
+
+Local rotating earth coordinate systems.
+----------------------------------------
+
+Given a point P on or over the earth, we can define a local coordinate
+system. The origin is at P, of course. The z axis points away from the
+center of the earth, towards P. The x axis points towards the east,
+and is parallel to the equator plane, while the y axis points towards
+the north. If we are on or over the poles, than the x and y axes are
+ill-defined; in this case, we pick any two perpendicular directions
+that are normal to the (still well defined) z axis.
+
+This system uses the earth's center in order to define the z axis
+direction. In this sense, it has some similarity to the ECR Geocentric
+system. Hence, we will call it Local ECR Geocentric system.
+
+Is there a Local ECR Geodetic system? Well, of course! The z axis now
+points away from the surface of the earth, from the foot of the
+altitude measurement P' towards P. In more concrete terms P'P marks
+our Local ECR Geodetic z axis. Note that it is not the same axis as in
+Local ECR Geocentric since the earth is non-spherical; but, still, the
+two z axes are close to each other. The x and y axes of the Local ECR
+Geodetic system are defined as in the geocentric system: x points
+eastward and is parallel to the equator plane, and y points northward.
+The x axes of the Local ECR systems overlap, but the y axes do not.
+
+A bunch of routines are provided to convert between these systems.
+First, E_LocalFrame() is used to obtain the frame defining a local
+system at a point given in ECR system coordinates.
+
+void E_LocalFrame(BOOLEAN UseEarth,Earth *E,Spherical *S,Frame *F);
+
+A frame *F, as stated in the documentation of the math library, is the
+definition of the units vectors I, J, and K along the coordinate axes.
+Hence, a call to E_LocalFrame() will place in the frame the
+coordinates of the I, J, and K vectors - these coordinates will be
+given in the corresponding ECR system. E_LocalFrame() can be used for
+both the geodetic and geocentric systems:
+
+ - If UseEarth is TRUE, the value of S is ignored. *E specifies a
+point in ECR Geodetic coordinates, and, E_LocalFrame() returns in F
+the Local ECR Geodetic unit vectors along the principal axes. The
+coordinates of the unit vectors are given in the ECR geodetic
+coordinates.
+
+ - If UseEarth is FALSE, the value of E is ignored. *S specifies a
+point in ECR Geocentric coordinates, and, E_LocalFrame() returns in F
+the Local ECR Geocentric unit vectors along the principal axes. The
+coordinates of the unit vectors are given in the ECR geocentric
+coordinates.
+
+More conversions follow. Given the ECR Geocentric AND Geodetic
+coordinates of P in *S and *E, respectively, we can transform local
+points and vectors.  Assume *A are the Local ECR Geodetic coordinates
+of any point. Then a call to E_LocalGeodToGeoc() will place in *D the
+Local ECR Geocentric coordinates of that point. E_LocalGeocToGeod()
+calculates *A given *D.
+
+void E_LocalGeodToGeoc(Earth *E,Spherical *S,Cartesian *A,Cartesian *D);
+void E_LocalGeocToGeod(Earth *E,Spherical *S,Cartesian *D,Cartesian *A);
+
+E_MFromLocalGeod() return the transformation matrix M that converts a
+VECTOR from Local ECR Geodetic to ECR Geodetic coordinates.
+E_MToLocalGeod() returns the matrix of the inverse transformation. *E
+defines the origin of the Local ECR Geodetic system (i.e. the point
+P), in ECR Geodetic coordinates.
+
+void E_MFromLocalGeod(Earth *E,Matrix M);
+void E_MToLocalGeod(Earth *E,Matrix M);
+
+E_MFromLocalGeoc() return the transformation matrix M that converts a
+vector from Local ECR Geocentric to ECR Geocentric coordinates.
+E_MToLocalGeoc() returns the matrix of the inverse transformation. *S
+defines the origin of the Local ECR Geocentric system, in ECR
+Geocentric coordinates.
+
+void E_MFromLocalGeoc(Spherical *S,Matrix M);
+void E_MToLocalGeoc(Spherical *S,Matrix M);
+
+
+Inertial earth coordinate systems.
+----------------------------------
+
+Rotating earth coordinate systems have a significant drawback because
+they move as the earth rotates about its axis. The inertial systems
+overcome this drawback. While they keep the origin at the center of
+the earth, they define the coordinate axes using points in space (a
+star's position) rather than points on the surface of the earth.
+
+There are (at least) two inertial coordinate systems. One places the
+xy plane on the equatorial plane, while the other makes it lie on the
+ecliptic plane. The former is called the earth centered inertial (ECI)
+equatorial system, and the latter is called ECI ecliptic system.
+Because of the relative rarity of the ECI ecliptic system in our
+applications, we will henceforth use ECI to denote the equatorial
+system, and ECL for the ecliptic system.
+
+The ECI and ECL systems are not stationary relative to each other. The
+inclination of the ecliptic plane relative to the equatorial plane
+changes slowly over time. Therefore, in order to convert coordinates
+from one to the other we need to be told the relative location of the
+two systems, in the form of a time measurement. We deduce the angle
+between the defining planes for the given time using formulas
+presented in the "Explanatory Supplement To The Ephemeris," 1961,
+pages 98-99. The units of the time parameter T should be Greenwich
+solar days from January 0, 1900.
+
+A convenience routine is provided to convert between the usual time
+specification in seconds, days, months, years form to Greenwich solar
+days from January 1, 1900. NOTE THAT THIS IS ONE DAY AFTER January 0,
+1900. Only years from 1901 to 2099 are covered.
+
+double DAY_FromYMDS(unsigned int Year,unsigned int Month,
+                    unsigned int Day,unsigned long Sec);
+
+There is a variety of coordinate system conversion routines. First,
+converting from ECI to ECL: E_MECIToECL() returns in M the
+transformation matrix, while E_ECIToECL() returns in *D the ECL
+coordinates of a vector *A, given in ECI coordinates. This is also a
+point transformation since ECI and ECL both place the origin at the
+earth's center.
+
+void E_MECIToECL(double T,Matrix M);
+void E_ECIToECL(double T,Cartesian *A,Cartesian *D);
+
+Second, converting from ECL to ECI: E_MECLToECI() returns in M the
+transformation matrix, while E_ECLToECI() returns in *D the ECI
+coordinates of a vector *A, given in ECL coordinates.
+
+void E_MECLToECI(double T,Matrix M);
+void E_ECLToECI(double T,Cartesian *A,Cartesian *D);
+
+Third, converting from ECR Geocentric to ECI: E_MECRToECI() returns in
+M the transformation matrix, while E_ECRToECI() returns in *D the ECI
+coordinates of a vector *A, given in ECR Geocentric coordinates. This
+is also a point transformation since ECI and ECR Geocentric both place
+the origin at the earth's center.
+
+void E_MECRToECI(double T,Matrix M);
+void E_ECRToECI(double T,Cartesian *A,Cartesian *D);
+
+Fourth, converting from ECI to ECR Geocentric: E_MECIToECR() returns
+in M the transformation matrix, while E_ECIToECR() returns in *D the
+ECR Geocentric coordinates of a vector *A, given in ECI coordinates.
+
+void E_MECIToECR(double T,Matrix M);
+void E_ECIToECR(double T,Cartesian *A,Cartesian *D);
+
+Fifth, converting between ECI and ECR Geodetic: E_FromECI() returns in
+*E the ECR Geodetic coordinates of a POINT *A, given in ECI
+coordinates. E_ToECI() does the reverse, returning in *A the ECI
+coordinates of *E, a point in ECR Geodetic coordinates.
+
+void E_FromECI(double T,Cartesian *A,Earth *E);
+void E_ToECI(double T,Earth *E,Cartesian *A);
+
+
+Local coordinate systems and SETS LVLH coordinates.
+---------------------------------------------------
+
+The documentation of the attitude library describes the LVLH
+coordinate axes of the shuttle. Here, we will only concern ourselves
+with the SETS LVLH system, which we will simply call LVLH.
+
+The LVLH coordinates depend on the shuttle's position and velocity
+vectors *R and *V, given in ECI coordinates. E_LVLHFrame() calculates
+the LVLH frame *F. The unit vectors along the LVLH axes are returned
+in ECI coordinates.
+
+RETCODE E_LVLHFrame(Cartesian *R,Cartesian *V,Frame *F);
+
+This function, as all LVLH conversion functions in the earth library,
+may return FAILURE or SUCCESS depending on whether the LVLH coordinate
+system is well- or ill-defined. Problems in its definition occur when
+the shuttle's velocity is aligned with the radial vector.
+
+Time for the conversion routines. First, converting from ECI to LVLH.
+Since the two systems do not have a common origin, point and vector
+transformations are different; we have only implemented vector
+transformations. E_MECIToLVLH() returns in M the transformation
+matrix, while E_ECIToLVLH() returns in *D the LVLH coordinates of a
+vector *A, given in ECI coordinates. *R and *V, as in all LVLH
+conversion functions, are the shuttle's position and velocity vectors
+in ECI coordinates.
+
+RETCODE E_MECIToLVLH(Cartesian *R,Cartesian *V,Matrix M);
+RETCODE E_ECIToLVLH(Cartesian *R,Cartesian *V,Cartesian *A,Cartesian *D);
+
+Second, converting from LVLH to ECI. E_MLVLHToECI() returns in M the
+transformation matrix, while E_LVLHToECI() returns in *D the ECI
+coordinates of a vector *A, given in LVLH coordinates.
+
+RETCODE E_MLVLHToECI(Cartesian *R,Cartesian *V,Matrix M);
+RETCODE E_LVLHToECI(Cartesian *R,Cartesian *V,Cartesian *A,Cartesian *D);
+
+Third, conversions between the LVLH and Local ECR Geocentric systems.
+These two systems are very similar. They share origins, as well as the
+z axis. Therefore, (i) point and vector transformations are identical,
+and (ii) we can convert from one to the other by simply rotating about
+the z axis by some angle.  E_AngleLocalLVLH() returns in *Angle the
+angle by which the Local ECR Geocentric x and y axes should be rotated
+about z in order to make this system overlap the LVLH system. We
+assume a right-handed rotation.
+
+RETCODE E_AngleLocalLVLH(Cartesian *R,Cartesian *V,double *Angle);
+
+The transformation matrix from Local ECR Geocentric to LVLH is
+returned in M by E_MLocalToLVLH(), while E_LocalToLVLH() returns in *D
+the LVLH coordinates of a vector *A, given in Local ECR Geocentric
+coordinates.
+
+RETCODE E_MLocalToLVLH(Cartesian *R,Cartesian *V,Matrix M);
+RETCODE E_LocalToLVLH(Cartesian *R,Cartesian *V,Cartesian *A,Cartesian *D);
+
+The transformation matrix from LVLH to Local ECR Geocentric is
+returned in M by E_MLVLHToLocal(), while E_LVLHToLocal() returns in *D
+the Local ECR Geocentric coordinates of a vector *A, given in LVLH
+coordinates.
+
+RETCODE E_MLVLHToLocal(Cartesian *R,Cartesian *V,Matrix M);
+RETCODE E_LVLHToLocal(Cartesian *R,Cartesian *V,Cartesian *A,Cartesian *D);
+
+
+Modeling the earth's magnetic field.
+------------------------------------
+
+We are using the International Geomagnetic Reference Field (IGRF) in
+order to model the earth's magnetic field. References and details on
+the model are available in "README.igrf". A short summary will be
+helpful here, though.
+
+The IGRF uses a spherical harmonic expansion with a lot of
+coefficients for its several terms in order to model the field. The
+coefficients change over time. Hence, although the mathematics of the
+IGRF model stay the same, there are several model revisions containing
+new coefficients. These coefficients are good for a period of 5 years,
+symmetrically distributed around the revision year. Hence, IGRF 1980
+covers years 1977.5 to 1982.5. If this model is used to guess the
+magnetic field values in 1985, it will have a relatively large error.
+Models are also provided for future predictions. Hence at 1982, the
+IGRF 1985 became available as a predictive model for the years 1982.5
+through 1987.5. But as this period became history, the model revision
+for 1985 was adjusted. Such revisions, on the basis of past data, are
+called DGRFs (Definitive Geomagnetic Reference Fields).
+
+With all this in mind, we will now present the models we have at our
+disposal. We are using IGRF 1985 and IGRF 1990. While DGRF 1985 is
+available, and newer revisions for the IGRF 1990 (and soon a DGRF) are
+becoming available, we have not entered the coefficients in our
+models.  The user of the library should set the IGRF revision year
+(1985 or 1990) at COMPILE-TIME, by defining the "user.h" constant
+IGRF_YEAR.  That's it for our models.
+
+At run-time, the user can request magnetic field values for any point
+over the earth, and for any point in time. So, the user might want to
+find out the field intensity over New York, at altitude 100km, on
+1/1/1987. It is usually the case that one wants to obtain a sequence
+of intensity measurements for the same time instant. Hence, it is
+convenient to specify the time once, and then retrieve several
+intensity measurements at different points. The time is set using
+
+void IGRF_SetYear(double Year);
+
+Year, in the above example, would be 1987. Note that Year has NOTHING
+to do with IGRF_YEAR, which defines the IGRF model revision. The only
+relevance between the two is that the model is reliable if Year is
+between IGRF_YEAR-2.5 and IGRF_YEAR+2.5. But if the IGRF model
+coefficients are constant for a particular revision, what is the role
+of Year? Well, the coefficients of an IGRF model are constant, but the
+model includes not only position, but time as well, as part of its
+mathematical formulation. In other words, for a given model and a
+single point in space, the intensity values change with time. The Year
+parameter sets the instant in time we are interested in, thus fixing
+one of the 4 degrees of freedom of a given IGRF model.
+
+The magnetic field value at a point around the earth (at time Year,
+which must have been set beforehand) is retrieved using
+IGRF_GetBField(). The coordinates of the point are given in *S, in ECR
+Geocentric coordinates. The intensity, in Tesla, is returned in *B, in
+Local ECR Geocentric coordinates.
+
+void IGRF_GetBField(Spherical *S,Cartesian *B);
+
+Since IGRF_GetBField() uses a spherical harmonic expansion, the poles
+are points of singularity. In order to avoid numerical instability
+around the poles, we simply calculate the intensity at some other
+point, nearby, but not on, the pole. The angular deviation of this
+point from the pole is specified in "user.h" via the constant POLES.
+
+
+Tracing magnetic field lines.
+-----------------------------
+
+Tracing magnetic field lines is a common operation in space physics.
+The goal is to follow the path of charged bodies until they reach some
+altitude at which they interact with other particles. There is a
+single routine that performs such a tracing using the IGRF magnetic
+field model, namely IGRF_Trace().
+
+typedef enum {WHILE_BELOW,WHILE_ABOVE} TRACE_DIRECTION;
+
+RETCODE IGRF_Trace(Earth *From,double ToAlt,TRACE_DIRECTION Dir,
+                   double Step,Cartesian *To);
+
+As in the case of IGRF_GetBField(), it is important to call
+IGRF_SetYear() before tracing begins. During tracing, we assume that
+time stands still.
+
+Tracing starts at point *From, given in ECR Geodetic coordinates.
+IGRF_Trace() follows the magnetic field line passing through *From,
+until a point Q is reached. The properties of Q are the following: its
+ECR Geodetic altitude should either be equal to ToAlt, or
+
+ - if Dir is WHILE_ABOVE, the altitude of Q should be less than ToAlt,
+and
+ - if Dir is WHILE_BELOW, the altitude of Q should be greater than
+ToAlt.
+
+ToAlt should be given in meters. When tracing ends, the field line
+point at altitude ToAlt is returned in *To, in ECR Geocentric
+coordinates, and the function returns SUCCESS. Step is the distance
+for which we assume a constant magnetic field intensity, in meters; a
+negative value allows the user to trace field lines in the direction
+opposite to the magnetic field intensity (backwards tracing).
+
+If the initial point *From lies below (if Dir is WHILE_ABOVE) or above
+(if Dir is WHILE_BELOW), ToAlt, then *To is not changed and FAILURE is
+returned. FAILURE might also be returned if the magnetic field line
+tracing reaches a point with zero field intensity, which is a rare
+event.
+
+
+Constants and macros.
+---------------------
+
+Several constants are used to model the earth and implement the
+functions given above. These constants are exported, and thus can be
+used provided "earth.h" is included in the relevant source file. Here
+they are:
+
+ - IAU 1966 (IGRF recommended) earth ellipsoid parameters, in meters.
+
+Semimajor axis: EARTH_A = 6378160.0
+Semiminor axis: EARTH_B = 6356774.719
+
+ - IGRF mean earth radius, in meters:
+
+MEAN_R = 6371200.0
+
+ - Length of a mean solar day, in mean sidereal days:
+
+SOLAR_SIDEREAL = 1.0027379093
+
+ - Angular rotation rate of the earth, in radians per second:
+
+EARTH_OMEGA = TWO_PI/(23.93447*3600.0), where TWO_PI = 2*pi.
+
+ - For convenience, the following derived constants are also provided:
+
+RATIO = EARTH_A/EARTH_B
+RATIO_SQR = RATIO*RATIO
+
+Three macros are provided to convert between different units of
+magnetic field intensity. Their names signify their function. Their
+single argument is a measurement of magnetic field intensity:
+
+GAUSS_TO_TESLA(), TESLA_TO_GAUSS(), NANOTESLA_TO_TESLA().
+
+
+Using the library.
+------------------
+
+An application that uses any of the routines, constants, or macros
+defined above must include the proper function declarations and type
+definitions defined in "earth.h".  This file, in turn, assumes that it
+has access to some items defined in other files. It follows that the
+lines
+
+#include <math.h>
+#include "advmath.h"
+#include "earth.h"
+
+must appear before any function documented here is called.
+
+The compiled application should link with the earth library
+(containing the implementation of the functions described above), as
+well as some other libraries. It suffices to link with "-learth -lam
+-lm" as linker options.

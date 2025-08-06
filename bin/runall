@@ -1,0 +1,106 @@
+#!/bin/csh -f
+#
+
+if (("$1" == '-help') || ("$1" == '-doc')) then
+more << EOM
+
+Usage:    runall	[-f <fileheader>] [-nominmax] [-pout]
+			[-addopt <additional TEMPEST options>]
+
+EOM
+
+   if ("$1" == '-doc') then
+more << EOH
+
+EOH
+   endif
+   exit
+endif
+
+onintr cleanup
+
+##############################################################################
+#default settings
+
+set filehead   = '*'
+set minmax     = 1
+set errlog     = 1
+set pout       = 0
+set addopt     = ''
+set binarify   = ''
+set binarify   = '-binarify'
+
+##############################################################################
+#now read in command line arguments
+
+set no_args = $#argv
+set cnt = 1
+
+while ($no_args >= $cnt )
+
+   switch ("$argv[$cnt]")
+      case '-f' :
+         @ cnt++
+         set filehead  = "$argv[$cnt]"
+         breaksw
+      case '-nominmax'
+         set minmax = 0
+         breaksw
+      case '-noerrlog'
+         set errlog = 0
+         breaksw
+      case '-pout'
+         set pout = 1
+         breaksw
+      case '-text'
+         set binarify = ''
+         breaksw
+      case '-addopt' :
+         @ cnt++
+         set addopt  = "$argv[$cnt]"
+         breaksw
+      case ' ' :
+         breaksw
+      default :
+         echo ''
+         echo ' Parameter Error ['"$argv[$cnt]"'] - type "runall" for usage'
+         echo ' '
+         exit(1)
+   endsw
+
+   @ cnt = $cnt + 1
+
+end
+
+##############################################################################
+#
+
+foreach pfile (`ls $filehead.params`)
+   echo 'Running TEMPEST with '"$pfile"
+
+   set rhead = $pfile:r
+
+   set options = ''
+   if ($minmax) then
+      set options = '-mout '$rhead'.minmax'
+   endif
+
+   if ($pout) then
+      set options = "$options"' -pout '$rhead'.pout'
+   endif
+
+   if ($errlog) then
+      tempest -f $pfile -o $rhead.out -lout $rhead.labels \
+		$options $binarify $addopt >& $rhead.errlog
+   else
+      tempest -f $pfile -o $rhead.out -lout $rhead.labels \
+		$options $binarify $addopt
+   endif
+end
+
+exit
+
+cleanup:
+   echo ''
+   echo 'WARNING: TEMPEST runall aborted\!\!'
+   echo ''

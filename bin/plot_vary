@@ -1,0 +1,135 @@
+#!/bin/csh -f
+#
+#
+
+if (("$1" == '') || ("$1" == '-help') || ("$1" == '-doc') || ($#argv < 2)) then
+   echo ' '
+   echo 'Usage:    plot_vary    -f <fileheader> [-e <extension>]'
+   echo '                       -var <variable> -range <start> <stop> <incr>'
+   echo '                       -pscript <script> [-title titlehead]'
+   echo ' '
+
+   if (("$1" == '-help') || ("$1" == '-doc')) then
+      echo 'This script is used to process/plot the data in the files specified'
+      echo 'by <fileheader>.<variable>_<value><extension> where value is in'
+      echo 'specified by the -range arguments.  The script <script> is called'
+      echo 'with the first parameter being the data files name and the second'
+      echo 'parameter is a title which is <titlehead> (<variable> = <value>).'
+      echo ' '
+      exit
+   endif
+
+   exit
+endif
+
+#default settings
+
+set vvar       = ''
+set start      = ''
+set stop       = ''
+set incr       = ''
+set dat_file   = ''
+set dat_exten  = ''
+set pscript    = ''
+set titlehead  = ''
+
+#now read in command line arguments
+
+set no_args = $#argv
+set cnt = 1
+
+while ($no_args >= $cnt )
+
+   switch ("$argv[$cnt]")
+      case '-f' :
+         @ cnt++
+         set dat_file  = "$argv[$cnt]"
+         breaksw
+      case '-e' :
+         @ cnt++
+         set dat_exten = "$argv[$cnt]"
+         breaksw
+      case '-var' :
+         @ cnt++
+         set vvar      = "$argv[$cnt]"
+         breaksw
+      case '-range' :
+         @ cnt++
+         set start     = "$argv[$cnt]"
+         @ cnt++
+         set stop      = "$argv[$cnt]"
+         @ cnt++
+         set incr      = "$argv[$cnt]"
+         breaksw
+      case '-pscript' :
+         @ cnt++
+         set pscript   = "$argv[$cnt]"
+         breaksw
+      case '-title' :
+         @ cnt++
+         set titlehead = "$argv[$cnt]"
+         breaksw
+      case ' ' :
+         breaksw
+      default :
+         echo ' '
+         echo ' Parameter Error ['"$argv[$cnt]"'] - type "vary" for usage'
+         echo ' '
+         exit(1)
+   endsw
+
+   @ cnt = $cnt + 1
+
+end
+
+if ($dat_file == "") then
+   echo ' '
+   echo ' Must specify a parameter file (-f <filename>) \!'
+   echo ' '
+   exit (1)
+endif
+
+if ($vvar == "") then
+   echo ' '
+   echo ' Must specify a variable to vary (-var <variable name>) \!'
+   echo ' '
+   exit (1)
+endif
+
+if ($start == "" || $stop == "" || $incr == "") then
+   echo ' '
+   echo ' Must completely specify range over which to vary (-range <...>) \!'
+   echo ' '
+   exit (1)
+endif
+
+# Make a list of the varying paramete values
+
+echo 'for (p='"$start"';p<='"$stop"';p+='"$incr"') p' > vary.tmp.$$
+echo 'quit' >> vary.tmp.$$
+
+set p_list = `bc -l vary.tmp.$$`
+
+rm vary.tmp.$$
+
+# Now perform the simulations
+
+foreach par_val ($p_list)
+   echo 'Performing tether simulation with '"$vvar"' = '"$par_val"
+
+   if ("$dat_file" == '') then
+      set out_file = out_file.$$
+   else
+      set out_file = "$dat_file"'.'"$vvar"'_'"$par_val""$dat_exten" 
+   endif
+
+   if ("$pscript" != '') then
+      set plot_title = "$titlehead"' ('"$vvar"' = '"$par_val"')'
+
+      $pscript "$out_file" "$plot_title"
+   endif
+
+   if ("$dat_file" == '') then
+      rm outfile.$$
+   endif
+end

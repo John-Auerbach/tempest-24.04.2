@@ -1,0 +1,127 @@
+The attitude library.
+---------------------
+
+The attitude library contains functions for converting between
+attitude specifications, as well conversions between NASA and SETS
+coordinate systems.
+
+
+SETS and NASA LVLH and body coordinate systems.
+-----------------------------------------------
+
+There is a confusing plethora of coordinate systems. And, of course,
+there is an equally abundant set of routines to transform vectors from
+one to the other.
+
+Consider the shuttle in space. Suppose its position and velocity
+vectors are given by R and V. The coordinate system in which these
+vectors are defined is the Earth Centered Inertial (ECI) system.
+
+LVLH (local vertical, local horizontal) coordinate systems have their
+origin O at the point whose position vector is R (always in the ECI
+system). In other words, the LVLH system rests on the shuttle's
+center. The z axis lies along the line connecting O and the earth's
+center. NASA defines positive Z towards the center of the earth
+("down" is positive), while in SETS we use a z axis oriented in the
+opposite direction ("up" is positive).  The y axis in the SETS LVLH
+system lies along the direction of RxV, the cross product of R and V;
+NASA defines the y axis along -RxV, i.e. opposite of SETS. Since both
+systems are right-handed, they define the x axis as the cross product
+of J and K, the unit vectors along their OWN y and z axes. It is not
+hard to deduce that the x axis is the same for both SETS and NASA.
+
+Body coordinates are another point of disagreement between NASA and
+SETS. Imagine you are sitting in the pilot's seat of the shuttle. The
+forward direction is along NASA's positive x axis, i.e. from the tail
+to the nose of the shuttle. On the other hand, in SETS we define the x
+axis in the reverse direction: from the nose to the tail of the
+shuttle. But both NASA and SETS define the y axis in the same way:
+positive y is to the pilot's right, i.e. from the left to the right
+wing, as the pilot perceives left and right. The z axis is again
+defined as JxK, since both NASA and SETS use right-handed systems.
+Hence, positive z extends downwards relative to the pilot for NASA,
+while SETS sees positive z as extending upwards.
+
+Given all these coordinate systems, the functions listed below provide
+transformation matrices from one system to the other:
+
+void NASA_MBodySETS(Matrix M);
+void NASA_MLVLHSETS(Matrix M);
+
+In particular, NASA_MBodySETS() places in M the matrix that has the
+following property: MW yields the coordinates of W in the SETS body
+coordinate system, assuming W is given in the NASA system. It so
+happens that the same matrix can effect the inverse transformation,
+i.e. from SETS body coordinates to NASA body coordinates.
+
+Similarly, NASA_MLVLHSETS() places in M the transformation matrix from
+NASA LVLH to SETS LVLH. The same matrix can be use for the inverse
+transformation.
+
+The two convenience functions listed below can be used to convert a
+vector *A from NASA to SETS coordinates (or from SETS to NASA) without
+having to bother with a transformation matrix. The result is placed in
+*B. NASA_BodySETS() converts between NASA and SETS body coordinates,
+while NASA_LVLHSETS() converts between LVLH coordinates.
+
+void NASA_BodySETS(Cartesian *A,Cartesian *B);
+void NASA_LVLHSETS(Cartesian *A,Cartesian *B);
+
+
+Pitch, roll, yaw.
+-----------------
+
+The attitude of a spacecraft can be defined in many different ways.
+One common way is to define the transformation from NASA LVLH
+coordinates to NASA body coordinates. In other words, we can specify
+the 3x3 matrix M which, given a vector W in NASA LVLH, it returns the
+coordinates of W in the NASA body coordinate system.
+
+Alternatively, we can substitute M by a set of three angles, called
+the pitch, roll, and yaw. These angles have an intuitive meaning for
+the pilot. Suppose that initially the NASA LVLH and body coordinate
+systems are aligned, i.e. the shuttle's wings rest on the LVLH xy
+plane. Also, the shuttle is facing forward, i.e. along the direction
+of movement (velocity vector V), and the earth is under the shuttle.
+Now you, the pilot, perform the following maneuver:
+
+ - First, lift the nose of the shuttle by the pitch angle. This is a
+right handed rotation about the NASA body y axis.
+ - Second, turn the shuttle to the right by the yaw angle. This is a
+right handed rotation about the NASA body z axis. This is the new z
+axis, i.e. after the first maneuver is performed.
+ - Third, tilt the shuttle to the right by the roll angle. This is a
+right handed rotation about the NASA body x axis.
+
+We have thus moved the body coordinate system in some orientation
+relative to the LVLH system.
+
+Transforming between the two attitude specifications is easy.
+PYR_FromMatrix() finds the pitch, yaw and roll angles corresponding to
+the transformation matrix M. The answer is returned in *P, *Y, and *R,
+in units of radians. PYR_ToMatrix() effects the inverse operation,
+i.e. given pitch in P, yaw in Y, and roll in R, it places in M the
+transformation matrix.
+
+void PYR_FromMatrix(Matrix M,double *P,double *Y,double *R);
+void PYR_ToMatrix(double P,double Y,double R,Matrix M);
+
+
+Using the library.
+------------------
+
+An application that uses any of the routines defined above must
+include the proper function declarations and type definitions defined
+in "attitude.h".  This file, in turn, assumes that it has access to
+some items defined in other files. It follows that the lines
+
+#include <math.h>
+#include "advmath.h"
+#include "attitude.h"
+
+must appear before any function documented here is called.
+
+The compiled application should link with the attitude library
+(containing the implementation of the functions described above), as
+well as some other libraries. It suffices to link with "-latt -lam
+-lm" as linker options.

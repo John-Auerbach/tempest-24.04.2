@@ -1,0 +1,87 @@
+The string space library.
+-------------------------
+
+The string space library defines a few functions implementing a
+storage area where strings can be stored efficiently.
+
+A string space SS is declared using the declaration
+
+SharedString *SS=NULL;
+
+A string Str is added to SS using
+
+SharedString *SS_Add(SharedString **SS,char *Str);
+
+When a string is added to the string space, a SHARED string pointer is
+returned. This is where storage optimization comes into play. If one
+tries to store "a string" in the string space twice, it will only be
+stored once. Both executions of SS_Add(SS,"a string") will return the
+same shared string pointer. Memory allocation for the strings in the
+string space is dynamic, and might therefore fail. In this case,
+SS_Add() will return NULL.
+
+A shared string contains not only the set of characters that comprise
+the string (e.g. "a string"), but also a reference count. This number
+indicates how many times the string "a string" was added to the string
+space. It follows that SharedString is defined as
+
+typedef struct _SharedString {
+  char         *Data;          /* Actual string. */
+  unsigned int RefCount;       /* Reference count. */
+
+  struct _SharedString *Nxt;   /* System-maintained. */
+} SharedString;
+
+All fields must be updated by the system only and should not be
+altered by the user. The Data field can be read in order to find the
+actual string characters of a shared string.
+
+Every time the user requests the system to append a string in the
+string space, an exhaustive search of the space is undertaken to
+ensure that no duplicates exist. Thus, SS_Add() is an expensive
+operation. A more efficient alternative is SS_Copy() which essentially
+increases the reference count of a shared string *SStr. In more
+abstract terms, it operates like SS_Add(), where the string added in
+the string space is SStr->Data. The shared string pointer of
+SStr->Data is returned.
+
+SharedString *SS_Copy(SharedString *SStr);
+
+A string should be removed from the string space once it is no longer
+needed. Hence, if "a string" needs to be removed, then SS_Remove()
+should be called with a shared string pointer SStr to "a string". This
+shared string pointer, SStr should have been obtained via SS_Add() or
+SS_Copy().
+
+void SS_Remove(SharedString *SStr);
+
+This requires some care. If "a string" is added 3 times to the string
+space, via either SS_Add() or SS_Copy(),then it should be removed 3
+times before its storage is deallocated. Moreover, it should not be
+removed more times than it was actually placed on the string space.
+
+Removal of shared strings does not automatically cause the shared
+string's deallocation, for the reasons given above. But, even if the
+string is removed as many times as added, it will still occupy some
+"zombie" memory until SS_Cleanup() is called on string space SS. It is
+only then that the memory allocator will reclaim all unused memory.
+Therefore, SS_Cleanup() should be called at regular intervals between
+string removals.
+
+void SS_Cleanup(SharedString **SS);
+
+
+Using the library.
+------------------
+
+An application that uses any of the routines defined above must
+include the proper function declarations and type definitions defined
+in "strsp.h". It follows that the line
+
+#include "strsp.h"
+
+must appear before any function documented here is called.
+
+The compiled application should also link with the string space
+library (containing the implementation of the functions described
+above). It suffices to link with "-lstrsp" as a linker option.

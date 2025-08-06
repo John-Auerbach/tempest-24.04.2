@@ -1,0 +1,490 @@
+The advanced math library.
+--------------------------
+
+The advanced math library contains a lot of functions implementing
+common (and uncommon) mathematical operations. Such operations cover
+from a simple squaring function, quadratic equation solutions, to
+associated Legendre functions and quaternion manipulation.
+
+For a programmer to use these routines, it is important for him/her to
+have a solid mathematical background; moreover, it is important to
+understand and adopt the nomenclature and conventions used. In
+particular, the user of the library should carefully review the
+definitions of each type's fields. For example, in the literature one
+may find quaternions defined with either their first or their last
+component being non-directional. Here, we use the former convention.
+The function nomenclature should also be understood, for it will allow
+a programmer to easily recall the function names when needed.
+
+
+The function format.
+--------------------
+
+Functions are named in a relatively systematic fashion. For example,
+all routines that operate directly on vectors have the prefix V_, and
+the ones handling matrices start with M_.
+
+Function arguments are always passed by value in C. For backwards
+compatibility with earlier C compilers who could not pass
+non-elementary types on the stack, we always pass complex types (e.g.
+vectors, quaternions) by reference. This method also speeds up the
+time needed to complete a function call. However, it obscures the
+usage of the argument, i.e. whether it is an input or output argument.
+On the other hand, the purpose and functionality of each procedure
+indirectly specifies which arguments provide input values and which
+are used to return function results.
+
+Since a function's return value is also stored on the stack, we have
+also insisted on returning only elementary types for early C compiler
+compatibility. Therefore, for example, the result of vector addition
+is returned in an argument (passed by reference) while the function
+itself is declared "void". Moreover, when a function may be undefined
+for (erroneous) values of the arguments, or when a function performs a
+task with no guarantee of success (e.g. solving of an equation), the
+function's return value is an enumerated type. We use either RETCODE
+(which can obtain the values SUCCESS or FAILURE) or BOOLEAN (TRUE or
+FALSE) as return value types in the case of such functions.
+
+IMPORTANT: If a function fails to accomplish its task (and thus
+returns FALSE or FAILURE), the output arguments contain undefined
+values. Do not count on them being unaltered or set to zeros.
+
+
+Starters: vectors.
+------------------
+
+A vector is stored in a type named Cartesian. This type contains three
+fields, namely X, Y and Z, for the three orthogonal components of the
+vector. All the functions which interpret a 3D vector as a point or
+direction in space (e.g. conversion to spherical coordinates) assume a
+right-handed coordinate system.
+
+typedef struct {
+  double X,Y,Z;
+} Cartesian;
+
+Most common operations that apply to vectors are implemented. V_Add()
+and V_Sub() add their first two arguments *A, and *B and return their
+sum and difference, respectively, in their third argument *C.  All
+arguments are passed by reference for reasons explained above.
+
+void V_Add(Cartesian *A,Cartesian *B,Cartesian *C);
+void V_Sub(Cartesian *A,Cartesian *B,Cartesian *C);
+
+A single vector *A can be operated on in three ways. First, one may
+find its length. Second, a vector may be multiplied by a constant B,
+and third, a vector may be used to define another vector, namely the
+unit vector in its direction. Consequently, we have defined three
+functions: V_Mag() returns the length of *A, V_Mult() multiplies *A by
+the scalar B and returns the result in *C, and finally, V_Unit()
+places in *C the unit vector in *A's direction. Since it is possible
+for no unit vector to lie along *A (if and only if *A is the zero
+vector), V_Unit() returns a RETCODE (SUCCESS or FAILURE) indicating
+whether a unit vector was placed in *C or not.
+
+double V_Mag(Cartesian *A);
+void V_Mult(Cartesian *A,double B,Cartesian *C);
+RETCODE V_Unit(Cartesian *A,Cartesian *C);
+
+The vector products are also implemented. V_Dot() returns the dot
+product of *A and *B. V_Cross() returns the cross product of *A and *B
+in its third argument *C, while the function itself returns nothing
+(void return value).
+
+double V_Dot(Cartesian *A,Cartesian *B);
+void V_Cross(Cartesian *A,Cartesian *B,Cartesian *C);
+
+We also provide variants of the product operations used to test for
+parallel or perpendicular vectors. While one might expect that the
+test V_Dot(A,B)==0.0 suffices to test if *A and *B are perpendicular,
+this is not the case due to rounding errors. As described above, we
+have defined the constant PERPENDICULAR_COSINE in the "user.h" file
+that sets the range in which the cosine of the angle between *A and *B
+lies when *A and *B are perpendicular. Similarly, the constant
+PARALLEL_SINE defines the upper limit of the sine of the angle between
+two parallel vectors. The functions V_DotIsZero() and V_CrossIsZero()
+return TRUE if either one of *A or *B is the zero vector or the angle
+between *A and *B is 90 or 0 (or 180) degrees, respectively. The third
+argument *C is used to store the dot or cross product of *A and *B
+whether TRUE or FALSE is returned.
+
+BOOLEAN V_DotIsZero(Cartesian *A,Cartesian *B,double *C);
+BOOLEAN V_CrossIsZero(Cartesian *A,Cartesian *B,Cartesian *C);
+
+Finally, the angle between two vectors *A and *B is computed by
+V_Angle(). This angle is not well defined if *A or *B is the zero
+vector. In this case, the function returns FAILURE and *C is
+undefined.  Otherwise, if the angle between two vectors is well
+defined, it is returned in the third argument *C. THE UNIT USED FOR
+ALL ANGLE MEASUREMENTS IS RADIANS.
+
+RETCODE V_Angle(Cartesian *A,Cartesian *B,double *C);
+
+
+Starters: matrices.
+-------------------
+
+A matrix is a 3x3 entity. It is declared as an array with row major
+order. Hence
+
+typedef double Matrix[3][3];
+
+stands for the matrix
+
+|-                    -|
+| [0][0] [0][1] [0][2] |
+| [1][0] [1][1] [1][2] |
+| [2][0] [2][1] [2][2] |
+|-                    -|
+
+Most matrix routines resemble the vector routines in structure. An
+important difference in the syntax is the form of the arguments they
+take: since arrays are always passed by reference in C, a Matrix A is
+passed as A in matrix functions, while, as we saw, above, a vector B
+needs to be passed explicitly by reference, i.e. as &B.
+
+M_Determinant() returns the determinant of its argument A. M_Unit()
+stores in its (output) argument A the 3x3 unit matrix (all 0s except
+on the diagonal which is occupied by 1s). M_Transpose() returns in C
+the transpose of A. And M_MMult() returns in C the matrix product of A
+and B.
+
+double M_Determinant(Matrix A);
+void M_Unit(Matrix A);
+void M_Transpose(Matrix A,Matrix C);
+void M_MMult(Matrix A,Matrix B,Matrix C);
+
+Matrices are often used to define transformations on column vectors of
+size 3. In other words, a matrix T defines a transformation T*v=w,
+where v and w are the original and transformed 3D vectors. Common
+transformation matrices are therefore provided. M_xRotation() places
+in B the matrix which rotates v by A radians about the x axis. The
+direction of rotation is important: different communities (graphics,
+physics, geophysics) adopt different standards: some are interested in
+rotating vectors, and some are interested in the inverse operation,
+i.e. of rotating a coordinate system. We have adopted the convention
+of implementing clockwise rotation of the vector around the rotation
+axis. Therefore we defined:
+
+void M_xRotation(double A,Matrix B);
+Sign of A: + when B should transform v=(0,1,0) to w=(0,cos A,-sin A).
+
+Similarly for the other two axes:
+
+void M_yRotation(double A,Matrix B);
+Sign of A: + when B should transform v=(0,0,1) to w=(-sin A,0,cos A).
+
+void M_zRotation(double A,Matrix B);
+Sign of A: + when B should transform v=(1,0,0) to w=(cos A,-sin A,0).
+
+Another common transformation is a change of coordinate systems. We
+can define a coordinate system by 3 axes in space. Each axis can be
+defined by a unit vector along its positive direction: I along the x
+axis, J along the y axis, and K along the z axis. The standard
+(global) coordinate system defines Ig, Jg, and Kg as (1,0,0), (0,1,0),
+and (0,0,1), respectively. A new local coordinate system can always be
+defined in terms of the global system by giving the Il, Jl, and Kl
+vectors in global coordinates; this is the role of the Frame
+structure.
+
+typedef struct {
+  Cartesian I,J,K;
+} Frame;
+
+Once a local coordinate system is defined by a frame, we can define
+matrices that take a vector in global coordinates and produce its
+local coordinates, i.e. given v as (a,b,c)=aIg+bJg+cKg, the
+transformed vector w=(a',b',c')=a'Il+b'Jl+c'Kl is identical to v in
+its physical interpretation but is given in terms of the local axes.
+M_FromGlobal() takes a frame *A and returns in C the matrix which
+effects exactly this transformation. Similarly, M_ToGlobal() takes a
+frame *A and returns in C the matrix which transforms a vector from
+local to global coordinates.
+
+void M_FromGlobal(Frame *A,Matrix C);
+void M_ToGlobal(Frame *A,Matrix C);
+
+It is often that one wishes to rotate a vector about an arbitrary
+direction in space. While quaternions (discussed below) are ideal for
+this purpose, an alternative is to use a local orthogonal coordinate
+system where an axis of the system is aligned with the line of
+rotation. We then take our vector in global coordinates, transform it
+into local coordinates, rotate about the local axis, and transform
+back to global coordinates. This process is effected by the
+convenience functions M_LocalxRotation(), M_LocalyRotation(), and
+M_LocalzRotation(), which yield the rotation matrix (applied and
+returning global vectors) about a local axis of frame *A and by an
+angle B, in radians, and with its sign similar to global rotation
+functions.
+
+void M_LocalxRotation(Frame *A,double B,Matrix C);
+void M_LocalyRotation(Frame *A,double B,Matrix C);
+void M_LocalzRotation(Frame *A,double B,Matrix C);
+
+Finally, a transformation matrix A is applied to a vector *B by
+multiplying the two to yield a vector *C. This is when M_VMult() does:
+
+void M_VMult(Matrix A,Cartesian *B,Cartesian *C);
+
+
+Easy rotations: quaternions.
+----------------------------
+
+Quaternions, while they have tedious and long formulas governing their
+behavior, provide a very easy interface to specifying rotations about
+an arbitrary axis. A quaternion has four components:
+
+typedef struct {
+  double Q1,Q2,Q3,Q4;
+} Quaternion;
+
+A quaternion transformation is an anticlockwise rotation about an axis;
+it is encoded in *Q as
+
+Q->Q1=cos(Theta/2),
+Q->Q2=sin(Theta/2)*cos(Alpha),
+Q->Q3=sin(Theta/2)*cos(Beta),
+Q->Q4=sin(Theta/2)*cos(Gamma),
+
+where Alpha, Beta And Gamma are the directional cosines of the axis
+and Theta is the rotation angle. e.g. the quaternion
+(cos(PI/4),sin(PI/4),0,0) transforms (0,1,0) to (0,0,1). It is
+important to note that while a quaternion has 4 components, it has 3
+degrees of freedom when it is used to represent a rotation. The
+constraint is that the sum of the squares of the components must be
+unity.
+
+Once a rotation is specified in quaternion form in *A, it can be easily
+converted into 3x3 matrix form in C using Q_Matrix():
+
+void Q_Matrix(Quaternion *A,Matrix C);
+
+But the power of quaternions extends beyond simple specification of
+rotations.  A sequence of rotations can be defined by multiplying
+together quaternions using Q_Mult(), which places in *C the product of
+*A and *B. The result, *C, is the quaternion which specifies the
+combined transformation of first rotating by *B, and then rotating by
+*A. Also, the inverse of a rotational transformation *A can be found
+by inverting (finding the conjugate of) a quaternion using Q_Invert();
+the result is placed in *C.
+
+void Q_Mult(Quaternion *A,Quaternion *B,Quaternion *C);
+void Q_Invert(Quaternion *A,Quaternion *C);
+
+
+Spherical coordinates.
+----------------------
+
+A vector can be expressed in spherical coordinates in 3D: the length R
+of the vector, the angle it makes with the z axis (Ph, short for Phi),
+and the angle the projection of the vector on the xy plane makes with
+the x axis (Th, short for Theta):
+
+typedef struct {
+  double R,Th,Ph;
+} Spherical;
+
+This form of vector representation has singularities, meaning that
+several different representations define identical vectors. Hence,
+when one tries to compare two vectors in spherical coordinates one
+cannot directly compare their R, Ph, and Th components to determine
+equality. There are two avenues of escape: the first is to obtain the
+cartesian (x, y, z axis) representation of the vector and compare the
+orthogonal components thus obtained. S_ToCartesian() places in *C the
+cartesian form of the spherical representation *S. The inverse
+operation is effected by S_FromCartesian().
+
+void S_ToCartesian(Spherical *S,Cartesian *C);
+void S_FromCartesian(Cartesian *C,Spherical *S);
+
+The second way to compare directly spherical representations is to
+normalize them first and then compare them. Normalization ensures
+that:
+
+1) If R is 0 then Ph and Th will both be 0.
+2) If the vector lies on the z axis (Ph is 0 or 180), then Th is 0.
+
+The normalization function is S_Normalize() and uses its only argument
+*S for both input and output.
+
+void S_Normalize(Spherical *S);
+
+By the way, S_FromCartesian() also yields a normalized spherical
+representation, i.e. obeying conditions 1) and 2).
+
+
+Associated Legendre functions.
+------------------------------
+
+The purpose of this documentation is to describe our implementation,
+not explain and introduce advanced mathematical concepts. Therefore,
+for the definition and usage of associated Legendre functions, the
+reader is referred to his/her favorite math book.
+
+We have implemented these functions and two of their siblings because
+they have wide usgae in spherical harmonic expansions, such as used
+for the International Geomagnetic Reference Field.
+
+ALF() returns the value of the associated Legendre function Pn,m(cos
+Theta), while ALF_Derivative() returns its derivative:
+
+double ALF(unsigned int n,unsigned int m,double Theta);
+double ALF_Derivative(unsigned int n,unsigned int m,double Theta);
+
+LP() returns the value of the Legendre polynomial Pn(cos Theta) for
+given n and Theta. A Legendre polynomial is the same as the associated
+Legendre function with same n and Theta, but with m being zero:
+
+double LP(unsigned int n,double Theta);
+
+Schmidt defines two normalizations of the associated Legendre
+functions. We have only implemented the quasi-normalized form.
+Schmidt_Coeff() returns the Schmidt quasi-normalization constant for
+the Legendre associated function Pn,m(cos Theta):
+
+double Schmidt_Coeff(unsigned int n,unsigned int m);
+
+Schmidt_Array() fills in the two arrays P and dP with the values of
+all the Schmidt quasi-normalized Legendre associated functions, P, and
+their derivatives w.r.t Theta, dP, for given m, for all n such that
+m<=n<=Nmax, and for given Theta. In particular, P[n] receives the
+value of the quasi-normalized Pn,m(cos Theta).
+
+void Schmidt_Array(unsigned int Nmax,unsigned int m,double Theta,
+		   double *P,double *dP);
+
+
+Simple utilities.
+-----------------
+
+Sqr() simply returns the square of A. It should be used only when A is
+a complicated expression whose evaluation cost exceeds the overhead of
+a function call.
+
+double Sqr(double A);
+
+Sign() returns 0, -1, or 1 if A is zero, negative, or positive
+respectively.
+
+int Sign(double A);
+
+Factorial() returns N! Be careful not to specify too large an N,
+otherwise overflows will occur.
+
+double Factorial(unsigned int N);
+
+ModBessel() returns an approximation of the Modified Bessel Function
+of order Order, and argument X. From Hildbrand, "Advanced Calculus for
+Applications," p.147-148. This approximation is valid only for small
+values of X.
+
+double ModBessel(unsigned int Order,double X);
+
+Quadratic() Places in *R1 and *R2 the roots of A*X*X + B*X + C. If and
+only if any roots exist, SUCCESS is returned. In case of a single
+root, it is placed in both *R1 and *R2. In case of infinite roots
+(A=B=C=0), *R1 and *R2 are set to zero.
+
+RETCODE Quadratic(double A,double B,double C,Complex *R1,Complex *R2);
+
+The Complex type employed by Quadratic() contains just two fields, for
+the real (R) and imaginary (I) components.
+
+typedef struct {
+  double R,I;
+} Complex;
+
+The MACROS DTR() and RTD() convert an angle measurement from degrees
+to radians and back, respectively. Finally, the constants PI, HF_PI,
+and TWO_PI are defined as equal to the values of the constants pi,
+pi/2, and 2*pi, respectively.
+
+
+Strange stuff.
+--------------
+
+In support of electron beam intersection calculations, we have
+developed two routines of doubtful general usage.
+
+The first is Eqn_NextSolution(). If NewEqn is TRUE, it calculates the
+first solution of
+
+x(t)=alpha*cos(NewOmega*t)+beta*sin(NewOmega*t)+gamma*t+delta=0
+
+in [0,+inf), if gamma!=0, or in [0,2*PI/NewOmega), if gamma=0. If a
+solution exists, TRUE is returned and *Sln contains the smallest
+non-negative root of the above equation.  Otherwise, FALSE is
+returned. Subsequent calls to the same function, with NewEqn=FALSE,
+place in *Sln the other solutions (in case of multiple solutions) in
+non-decreasing order, and return TRUE; FALSE is returned when there
+are no more solutions. In case of infinite solutions, only 0 is
+returned.
+
+NewAccuracy determines the accuracy of the approximation method
+utilized to obtain solutions (applies for the non-degenerate case). It
+sets the upper bound for the error in x(t), i.e. fabs(x(t)) is bound
+by NewAccuracy:
+
+BOOLEAN Eqn_NextSolution(BOOLEAN NewEqn,double alpha,double beta,double gamma,
+			 double delta,double NewOmega,double NewAccuracy,
+			 double *Sln);
+
+The "user.h" constant RELATIVE_IMPORTANCE is used in
+Eqn_NextSolution(), to determine the relative weight of the
+alpha*cos(NewOmega*t) and beta*sin(NewOmega*t) terms of the equation;
+if fabs(beta/alpha)>RELATIVE_IMPORTANCE, then fabs(alpha)<<fabs(beta),
+and thus alpha is set to 0, an approximation necessary to avoid
+rounding errors.
+
+The second function of doubtful general usage is S_NextSample()
+returning a sequence of points sampling the cone whose vertex is
+located at the origin, whose axis direction is SetData->E, and whose
+(half) angle is SetData->Spread. SetData->dSpread is the sampling
+step. When requesting a new sequence, SetData->Spread must be in the
+range [0,HF_PI], SetData->dSpread should be positive, and NewSet must
+be TRUE. To retrieve new points in the same sequence, set NewSet to
+FALSE. Do not alter the elements of the *SetData structure. The
+function will be returning TRUE as long as a sample point is found;
+this point will be returned in *EOut and will lie on the unit sphere
+centered at the origin.
+
+BOOLEAN S_NextSample(BOOLEAN NewSet,SphSampleParam *SetData,Cartesian *EOut);
+
+The *SetData structure is of the following type:
+
+typedef struct {
+  Cartesian E;                     /* Set by user. */
+  double    Spread,dSpread;
+
+  Cartesian Ej,Se,Si,Sj;           /* System-maintained. */
+  double    CosSpread,dSideSpread;
+  double    i,Spani,j,Spanj;
+} SphSampleParam;
+
+It is important that, while a sample is being taken by successive
+calls to S_NextSample(), the system-maintained fields of the structure
+not be altered. The use of a structure containing the state of the
+sampling process, instead of some internal static variables, allows
+multiple sampling processes to take place concurrently (or nested).
+This is not the case with Eqn_NextSolution(), where static variables
+are used.
+
+
+Using the library.
+------------------
+
+An application that uses any of the routines defined above must
+include the proper function declarations and type definitions defined
+in "advmath.h". This file, in turn, assumes that it has access to the
+constants of "math.h", the standard Unix math library include file. It
+follows that the lines
+
+#include <math.h>
+#include "advmath.h"
+
+must appear before any function documented here is called.
+
+The compiled application should also link with the advanced
+mathematics library (containing the implementation of the functions
+described above), as well as the standard math library. It suffices to
+link with "-lam -lm" as linker options.

@@ -1,0 +1,404 @@
+The solid library.
+------------------
+
+The solid library defines a variety of objects that "reside" in
+three-dimensional space. Moreover, it provides several facilities for
+grouping similar objects together. Finally, it implements Binary Space
+Partitioning (BSP) trees, a data structure that orders surfaces for
+realistic rendering on a graphical workstation.
+
+
+Planes and vertices.
+--------------------
+
+A plane in space can be uniquely identified by a vector U and a scalar
+D.  The vector U is normal to the plane, and has unit norm (length).
+The scalar D stands for the distance of the plane from the origin
+along the direction U. Hence, if R=(x,y,z) is any point in space, it
+lies on the plane if and only if RU=D where RU stands for the dot
+product of R and U. If D is negative, we can reach the plane from the
+origin by moving along -U for a distance of -D.
+
+Given this description of a plane, it is natural to define the
+following type to store planes:
+
+typedef struct { /* Vector equation of a plane. */
+  Cartesian u;   /* Unit normal to plane. */
+  double    d;   /* Distance from origin (not necessarily positive). */
+} Plane;
+
+Points in space have already been implemented with the Cartesian type.
+However, when considering a big set of objects in space, we frequently
+use some points again and again. Such shared points include points
+defining shared edges or joints between surfaces. To avoid redundant
+storage (and for the sake of efficient execution of the BSP, and
+other, routines) we maintain a vertex space. Although the string space
+library is not related directly with the routines described below, its
+implementation is very similar to the the vertex space library.
+Therefore, a good grasp on the concepts of maintaining and managing a
+shared space can be gained by thoroughly understanding the string
+space library first.
+
+A vertex first and foremost has a location V in space. Moreover, if we
+allow shared vertices, we want to keep track of the number of objects
+that contain this vertex; our reference counter is RefCount. Both of
+these fields should never be updated directly. Instead, vertices
+should be defined though the vertex space management functions (VS_*),
+described below. Finally, there is one field in the vertex structure
+whose protocol of usage is completely left to the user, namely
+UserData. This user hook (or handle) is provided for almost every
+complex type we define.
+
+typedef struct _Vertex { /* A point in the model space. */
+  unsigned int RefCount; /* Reference count. */
+  Cartesian    V;        /* Global coordinates. */
+
+  struct _Vertex *Nxt;
+
+  /* Binary space partitioning tree parameters. */
+
+  double  Dist;
+  int     Location;
+
+  /* User handle to additional vertex data. */
+
+  void *UserData;
+} Vertex;
+
+The Nxt field is system-maintained and should not be altered by the
+user. Dist, and Location are also used by the system, but only during
+calls to BSP_Add(), described below. Hence, they can be used by the
+programmer at will, with the precaution that their values will be
+destroyed during BSP_Add(), when and if called.
+
+
+Vertex space management.
+------------------------
+
+Vertex space management functions closely parallel their string space
+analogues. A vertex space is declared by
+
+Vertex *VS=NULL;
+
+A vertex with coordinates *V is added to VS using
+
+Vertex *VS_Add(Vertex **VS,Cartesian *V);
+
+When a vertex is added to the vertex space, a SHARED vertex pointer to
+a vertex structure is returned. If dynamic allocation of a vertex
+fails, NULL is returned.
+
+A more efficient way to add vertices to VS is via the VS_Copy()
+routine which essentially increases the reference count of a shared
+vertex *SharedV. In more abstract terms, it operates like VS_Add(),
+where the vertex added in the string space is SharedV->V. The shared
+vertex pointer of the coordinates SharedV->V, i.e. SharedV itself, is
+returned.
+
+Vertex *VS_Copy(Vertex *SharedV);
+
+A shared vertex *SharedV can be removed from the vertex space using
+VS_Remove(). However, VS_Remove() only marks shared vertices for
+deallocation, when their reference count goes to 0. It is VS_Cleanup()
+that deallocates the memory of unreferenced vertices in the space VS.
+
+void VS_Remove(Vertex *SharedV);
+void VS_Cleanup(Vertex **VS);
+
+
+Surfaces.
+---------
+
+A surface in three-dimensional space can be a very complicated object.
+We restrict ourselves to implementing only surfaces that (i) lie on a
+plane, (ii) have a convex polygonal boundary, (iii) are
+non-degenerate, i.e. have at least three non-collinear vertices.
+
+For each surface we maintain several pieces of information:
+
+(a) The plane containing the surface (P).
+
+(b) The sides of the surface outline. Each side of the surface is a
+line segment. We retain one of the endpoints of this segment (a
+vertex) and the equation of the plane which (i) contains the side, and
+(ii) is perpendicular to the surface plane P. This plane is called the
+side plane.  The sides of surface are kept in a linked list whose head
+is Sd and tail is LastSd. The individual side information is kept in
+the list cells of type Side: Pi is the side plane, and V is a pointer
+to a shared vertex (i.e. a vertex in a vertex space) that lies on the
+side.
+
+The fields listed above can be read by the user, but they should not
+be modified. In order to define surfaces, the surface-related
+functions (Su_*), described below, should be used, instead.
+
+typedef struct _Side { /* Polygonal surface side. */
+  Vertex *V;           /* Associated vertex. */
+  Plane  Pi;           /* Side plane. */
+
+  struct _Side *Nxt;
+} Side;
+
+typedef struct _Surface { /* Planar surface with convex polygonal boundary. */
+  Side  *Sd;              /* Side information. */
+  Side  *LastSd;          /* Last side. */
+  Plane P;                /* Equation of surface plane. */
+
+  struct _Surface *Nxt;
+
+  /* Binary space partitioning tree parameters. */
+
+  BOOLEAN         Remove;
+  BOOLEAN         Temporary;
+  struct _Surface *Originator;
+  struct _Surface *Front,*Back
+
+  /* User handle to additional surface data. */
+
+  void *UserData;
+} Surface;
+
+As in the case of the Vertex type, UserData is a field that the
+programmer can use at his/her discretion. The fields marked as
+parameters for the BSP tree are completely system-maintained and
+should not be altered at any time.
+
+
+Defining and collecting surfaces.
+---------------------------------
+
+A (singly-linked) list of surfaces SL can be maintained with the
+assistance of the solid library. The Nxt field of the surface
+structure is used for list maintenance. SL is declared using
+
+Surface *SL=NULL;
+
+Su_Create() creates a new surface (with NULL for UserData), and adds
+it to the front of the surface list *SL (i.e. pass the SL declared
+above as &SL to Su_Create()). It then returns a pointer to the new
+surface under normal circumstances. It might return NULL if a memory
+allocation failure takes place.
+
+Surface *Su_Create(Surface **SL);
+
+When a surface is created, it has no defined shape. Therefore, there
+is a need for a mechanism defining a surface shape. This is the role
+of Su_AddVertex(). It should be called once for each vertex on the
+surface boundary. Every time it is called, it adds the shared vertex
+*V to the outline of surface *S. The vertices should be given in
+clockwise (or anti-clockwise) order, as one would encounter them
+moving along the surface outline.
+
+RETCODE Su_AddVertex(Surface *S,Vertex *V);
+
+When vertices are added, there is no check that they satisfy the
+conditions laid out for a surface, i.e. that the vertices all lie on a
+plane, etc. FAILURE may be returned by Su_AddVertex() only in case of
+a rare memory allocation error. Moreover, Su_AddVertex() makes no
+attempt to generate the surface plane or the side planes.  Hence, once
+all the vertices of a surface *S are defined, you should call
+Su_SetPlanes().
+
+void Su_SetPlanes(Surface *S);
+
+When surfaces are no longer needed, their memory should be
+deallocated. Su_Free() and Su_FreeList() deallocate the storage
+occupied by either the single surface *S, or the list SL.
+
+void Su_Free(Surface *S);
+void Su_FreeList(Surface *SL);
+
+Keep in mind that the management of the internal structures within a
+surface, e.g. the list of sides Sd, is completely automated. In other
+words, Su_AddVertex(), and the other surface-related functions (Su_*)
+make sure that these structures are properly allocated and
+deallocated.
+
+
+Lines and surfaces.
+-------------------
+
+A line is described by two vectors, *A and *V. *A is a point on the
+line, and *V is a vector along the line. Hence if R=(x,y,z) is any
+point in space, it lies on the line if and only if there exists a
+scalar T such that (*A) + (*V) * T = R. Moreover, by restricting the
+range of T we can define line segments.
+
+Two line-to-surface intersection routines are provided. First comes
+Int_NearHalfLineCrossPoly(), which finds the first intersection of a
+line and a surface. In particular, it finds the smallest non-negative
+value of *T such that the expression (*A)+(*V)*(*T), i.e.  a point on
+the line, yields a point on the surface *S. TRUE is returned if and
+only if intersection takes place.
+
+BOOLEAN Int_NearHalfLineCrossPoly(Cartesian *A,Cartesian *V,
+				  Surface *S,double *T);
+
+Int_HalfLineCrossSides() finds the range of values of T for which the
+line segment (*A)+(*V)*T, T in [*T0,*T1], lies within the subspace
+bounded by the side planes of the polygonal surface *S. The side
+planes form a cylindrical object whose boundary (*S's side planes) is
+considered part of its interior. TRUE is returned if and only if
+intersection takes place. The resulting range is returned in
+[*T0,*T1]. Note that T0 and T1 are used to specify the line segment
+endpoints upon invocation; but they are also used upon return to store
+the desired range.
+
+BOOLEAN Int_HalfLineCrossSides(Cartesian *A,Cartesian *V,Surface *S,
+			       double *T0,double *T1);
+
+
+Putting it all together: bodies.
+--------------------------------
+
+A body is simply a collection of surfaces. Nothing more, nothing less.
+The body surfaces are kept in the surface list S. UserData, is the
+well-known user hook, i.e. a field that the user may use in any way
+they like.
+
+typedef struct _Body { /* Body (set of polygonal surfaces). */
+  Surface *S;          /* Surface set. */
+
+  struct _Body *Nxt;
+
+  /* User handle to additional body data. */
+
+  void *UserData;
+} Body;
+
+Bodies can be collected together in a linked list. This is the
+function of the system-maintained Nxt field. However, just as in the
+case of surfaces, there is a family of routines (Bd_*) that make it
+easier to manage lists of bodies. These routines are direct analogues
+of their respective Su_* analogues.
+
+Body *Bd_Create(Body **BL);
+void Bd_Free(Body *B);
+void Bd_FreeList(Body *BL);
+
+What about defining the body? After a body is created, it has a NULL
+surface list. The surface list can be then directly manipulated and
+updated, by using the surface list management functions on the S field
+of a body. Note, however, that the Bd_Free() and Bd_FreeList() take
+care of deallocating the surface list when the body's memory is
+destroyed.
+
+
+Binary Space Partitioning (BSP) trees.
+--------------------------------------
+
+A BSP tree is a data structure which somehow defines an ordering of a
+set of surfaces, given a point P in space. The idea is the following:
+if you were to stand in space with your eye at P, then you would see
+lots of surfaces. Some will be fully visible, and some will be
+partially obscured by others in front of them. Yet others would be
+completely obscured. This visibility criterion establishes some order
+on the surfaces, starting from those in the far back (and probably
+hidden), to those in the forefront (which you can definitely see
+unobscured). A BSP tree allows the user to obtain this order for any
+point P.
+
+The theory of BSP trees is beyond the scope of this documentation.
+Consult the following book for information on the algorithm we are
+implementing:
+
+Folley, J.D., A. van Dam, S.K. Feiner, and J.H. Hughes.  "Computer
+Graphics: Principles and Practice." 2nd ed. Reading, MA: Addison,
+1990. pp.675-80.
+
+Our implementation defines a BSP tree type ss follows. All fields are
+managed by the system.
+
+typedef struct _BSPTree {
+  Surface *Root;
+  Surface *Split;
+  BOOLEAN TemporaryExists;
+} BSPTree;
+
+An empty BSP tree, i.e. containing an ordering of no surfaces, is
+created by BSP_Create(). The symmetric operation, BSP_Free() deletes
+the BSP tree *BT.
+
+BSPTree *BSP_Create();
+void BSP_Free(BSPTree *BT);
+
+Between creation and deletion, there are three basic operations that
+can be performed on *BT. First, we can add the surfaces of a body *B
+to it. When a set of surfaces is added to *BT, the *BT restructures
+itself to act as an ordering of the old AND the new surfaces. Part of
+the BSP restructuring requires the creation of sub-surfaces, called
+split surfaces. These split surfaces are sections of the body surfaces
+of *B. When these split surfaces are created, their vertices need to
+be stored in a vertex space. This is the role of the vertex space
+parameter, namely VS. Moreover, for the purpose of maintaining
+statistics, *Splits is set to the number of split surfaces created
+during the update of the tree.
+
+RETCODE BSP_Add(BSPTree *BT,Body *B,Vertex **VS,int *Splits,
+		BOOLEAN Temporary);
+
+The Temporary argument is related to the second operation on BSP
+trees, which is surface removal. While it may seem weird, it is not
+possible to remove surfaces from the BSP tree ordering once they have
+been added. The only way that this may be done, is by telling
+BSP_Add() that the surfaces of a single body are added temporarily
+(set Temporary to TRUE). Then, BSP_RemoveTemporary() can be used to
+remove this set of surfaces. There is one provision: after the
+temporary body is added to the tree, no more bodies can be added until
+the temporary one is removed.
+
+void BSP_RemoveTemporary(BSPTree *BT);
+
+It follows from our discussion above that BSP_Add() returns FAILURE in
+two cases: either when there is a memory allocation failure, or when
+the user tries to add a body to a tree which contains a temporary
+body.
+
+Keep your eyes open for a pitfall. If a BSP tree contains an ordering
+of the surfaces of a body, it is unwise to deallocate this body
+(Bd_Free() or Bd_FreeList()) without ALSO deallocating the BSP tree.
+If the BSP tree is not deallocated, it will contain dangling pointers
+to non-existing surfaces, and plenty of segmentation faults will
+occur.
+
+The third and final operation on BSP trees is retrieval of the
+ordering (i.e. traversal) for a given eye location. BSP_Traverse()
+traverses the BSP tree *BT, calling the callback function *NewCallback
+in back-to-front surface order. The callback function is passed one
+argument, a surface pointer, and is expected to return FALSE should
+the tree traversal be immediately arrested (for whatever reason). If
+and only if this happens, the BSP_Traverse() function returns FAILURE.
+The surface ordering is determined by the location of the observer's
+eye, given in *P.
+
+RETCODE BSP_Traverse(BSPTree *BT,Cartesian *P,BOOLEAN (*NewCallback)());
+
+
+The "user.h" file.
+------------------
+
+"user.h" contains a single constant PLANE_DISTANCE. It is the maximum
+(normal) distance of a point from a plane, in meters, such that the
+point is considered to lie on the plane. It is used to overcome
+rounding problems when the location of points relative to planes is
+examined.
+
+
+Using the library.
+------------------
+
+An application that uses any of the routines defined above must
+include the proper function declarations and type definitions defined
+in "solid.h".  This file, in turn, assumes that it has access to some
+items defined in other files. It follows that the lines
+
+#include <math.h>
+#include "advmath.h"
+#include "solid.h"
+
+must appear before any function documented here is called.
+
+The compiled application should link with the solid library
+(containing the implementation of the functions described above), as
+well as some other libraries. It suffices to link with "-lsolid -lam
+-lm" as linker options.

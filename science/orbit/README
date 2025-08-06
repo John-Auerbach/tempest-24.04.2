@@ -1,0 +1,23 @@
+{ Documentation to be provided by Adam London. }
+
+
+Using the library:
+------------------
+
+An application that uses any of the routines and constants defined in
+the orbit library must include the proper function declarations and
+type definitions defined in "orbit.h".  This file, in turn, assumes
+that it has access to some items defined in other files. It follows
+that the lines
+
+#include <math.h>
+#include "advmath.h"
+#include "earth.h"
+#include "orbit.h"
+
+must appear before any function in the library is called.
+
+The compiled application should link with the orbit library
+(containing the implementation of the functions described above), as
+well as some other libraries. It suffices to link with "-lorbit
+-learth -lam -lm" as linker options.

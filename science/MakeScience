@@ -1,0 +1,80 @@
+#!/bin/bash
+# Run this script to remake all the science libraries.
+
+set ARCH=`arch`
+echo "Architecture: $ARCH"
+rm obj/$ARCH/*.o
+rm lib/$ARCH/*.a
+
+echo " "
+echo "Starting STRSP"
+cd strsp
+make
+rm test verify *\~ \#*\#
+make verify
+verify > ../STATUS
+
+echo " "
+echo "Starting Math"
+cd ../math
+make
+rm test verify *\~ \#*\#
+make verify
+verify >> ../STATUS
+
+echo " "
+echo "Starting Attitude"
+cd ../attitude
+make
+rm test verify *\~ \#*\#
+make verify
+verify >> ../STATUS
+
+echo " "
+echo "Starting Earth"
+cd ../earth
+make
+rm test verify *\~ \#*\#
+make verify
+verify >> ../STATUS
+
+echo " "
+echo "Starting Orbit"
+cd ../orbit
+make
+rm test verify *\~ \#*\#
+make verify
+verify >> ../STATUS
+
+echo " "
+echo "Starting Solid"
+cd ../solid
+make
+rm test verify *\~ \#*\#
+make verify
+verify >> ../STATUS
+
+echo " "
+echo "Starting Beam"
+cd ../beam
+make
+rm test verify *\~ \#*\#
+#### BEAM does not have verif.c #####
+#make verify
+#verify >> ../STATUS
+
+echo " "
+echo "Starting reader"
+cd ../reader
+make
+rm test verify *\~ \#*\#
+#### READER DOES NOT HAVE VERIFY.C #######
+#make verify
+#verify >> ../STATUS
+
+cd ..
+
+clear
+more STATUS
+rm STATUS
+

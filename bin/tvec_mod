@@ -1,0 +1,42 @@
+#!/bin/csh -f
+#
+# file: tvec_mod
+
+# need to modify to compute numbers mod .., and to be
+# included in other routines
+
+if ($1 == "-help") then
+
+echo ' '
+echo 'Usage: tvec_mod [ddd [hh [mm [ss]]]]'
+echo ' '
+echo 'Where tvec_mod reads the command line argument or stdin and'
+echo 'returns the input time with the numbers modified modulo'
+echo '365, 24, 60, and 60 respectively.'
+echo 'The format of the time is 1 to 4 integers per line, where'
+echo 'missing values are replaced by zero.  The output is always'
+echo '4 integers per line'
+echo ' '
+
+exit
+endif
+
+
+if ($1 == "") then
+
+
+awk '{ tinc[1] = 1; tinc[2] = 24; tinc[3] = 60; tinc[4] = 60; \
+ tval[1] = $1; tval[2] = $2; tval[3] = $3; tval[4] = $4}  \
+ { for ( i = 4; i >= 2; i--) \
+ {if (tval[i] < 0) { tval[i] = tval[i] + tinc[i]; tval[i-1] = tval[i-1] - 1}}} \
+ { for ( i = 4; i >= 2; i--) \
+ {if (tval[i] > tinc[i] - 1) { tval[i] = tval[i] - tinc[i]; tval[i-1] = tval[i-1] + 1}}} \
+ { printf("%03s %02s %02s %02s\n", tval[1], tval[2], tval[3], tval[4]) }'
+ 
+
+
+else 
+
+echo "$1 $2 $3 $4" | tvec_mod
+
+endif

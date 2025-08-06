@@ -1,0 +1,218 @@
+#!/bin/csh -f
+
+if (("$1" == '-help') || ("$1" == '-doc')) then
+more << EOM
+
+Usage:    plotall	[-f <fileheader>] [-title <title>] [-lpr] [-nodisp]
+			[-xcol  <xcol>] [-xrange  <xmin> <xmax>]
+			[-ycol  <ycol>] [-yrange  <ymin> <ymax>]
+			[-ycol2 <ycol>] [-yrange2 <ymin> <ymax>] 
+			[-start <start<] [-end <end>] [-delta <delta]
+
+EOM
+
+   if ("$1" == '-doc') then
+more << EOH
+
+EOH
+   endif
+   exit
+endif
+
+onintr cleanup
+
+##############################################################################
+#default settings
+
+set filehead   = '*'
+set titlehead  = 'TEMPEST output for a 20.7km tether'
+set xcol       = 1
+set xmin       = ''
+set xmax       = ''
+set xrange     = ''
+set ycol       = 990
+set ymin       = ''
+set ymax       = ''
+set yrange     = ''
+
+set over       = 0
+set overlay    = ''
+set ylabel2    = ''
+set ymin2      = ''
+set ymax2      = ''
+set yrange2    = ''
+
+set start      = '002/00:00:00.000'
+set end        = '004/00:00:00.000'
+set delta      = '000/03:00:00.000'
+
+set lpr        = ''
+set disp       = ''
+set options    = ''
+
+
+##############################################################################
+#now read in command line arguments
+
+set no_args = $#argv
+set cnt = 1
+
+while ($no_args >= $cnt )
+
+   switch ("$argv[$cnt]")
+      case '-f' :
+         @ cnt++
+         set filehead  = "$argv[$cnt]"
+         breaksw
+      case '-xcol' :
+         @ cnt++
+         set xcol  = "$argv[$cnt]"
+         breaksw
+      case '-ycol' :
+         @ cnt++
+         set ycol  = "$argv[$cnt]"
+         breaksw
+      case '-xrange' :
+         @ cnt++
+         set xmin      = "$argv[$cnt]"
+         @ cnt++
+         set xmax      = "$argv[$cnt]"
+         breaksw
+      case '-yrange' :
+         @ cnt++
+         set ymin      = "$argv[$cnt]"
+         @ cnt++
+         set ymax      = "$argv[$cnt]"
+         breaksw
+      case '-title' :
+         @ cnt++
+         set titlehead = "$argv[$cnt]"
+         breaksw
+      case '-lpr' :
+         set lpr       = '-lpr'
+         set disp      = '-nodisp'
+         breaksw
+      case '-nodisp' :
+         set disp      = '-nodisp'
+         breaksw
+      case '-ycol2' :
+         @ cnt++
+         set over  = "$argv[$cnt]"
+         breaksw
+      case '-yrange2' :
+         @ cnt++
+         set ymin2     = "$argv[$cnt]"
+         @ cnt++
+         set ymax2     = "$argv[$cnt]"
+         breaksw
+      case '-logx'    :
+         set options   = "$options $argv[$cnt]"
+         breaksw
+      case '-logy'    :
+         set options   = "$options $argv[$cnt]"
+         breaksw
+      case '-xdim'    :
+         set options   = "$options $argv[$cnt]"
+         @ cnt++
+         set options   = "$options $argv[$cnt]"
+         breaksw
+      case '-ydim'    :
+         set options   = "$options $argv[$cnt]"
+         @ cnt++
+         set options   = "$options $argv[$cnt]"
+         breaksw
+      case '-rotate'  :
+         set options   = "$options $argv[$cnt]"
+         @ cnt++
+         set options   = "$options $argv[$cnt]"
+         breaksw
+      case '-toeps'   :
+         set options   = "$options"' -xdim 6.0 -ydim 4.0 -rotate portrait'
+         set disp      = '-nodisp'
+         breaksw
+      case '-ps'  :
+         set options   = "$options $argv[$cnt]"
+         @ cnt++
+         set options   = "$options $argv[$cnt]"
+         breaksw
+      case ' ' :
+         breaksw
+      default :
+         echo ''
+         echo ' Parameter Error ['"$argv[$cnt]"'] - type "plotall" for usage'
+         echo ' '
+         exit(1)
+   endsw
+
+   @ cnt = $cnt + 1
+
+end
+
+##############################################################################
+#
+
+if ($ycol == 0) then
+   echo ''
+   echo ' You MUST choose a data value to plot (using -ycol)'
+   echo ' The following data is available:'
+   echo ' '
+   @ cnt = 1
+   while ($cnt <= $#label_list)
+      echo $cnt'     '"$label_list[$cnt]"
+      @ cnt++
+   end
+   echo ' '
+   exit (1)
+endif
+
+if ("$xmin" != '') then
+   set xrange = '-xrange '"$xmin"' '"$xmax"
+endif
+
+set curr_start = $start
+
+foreach output (`ls $filehead.out`)
+   set run = $output:r
+
+   echo ' Plotting data from run '$run
+
+   set title = "$titlehead"' ('"$run"')'
+
+   set count = 1
+
+   while (`compgmt "$end" "$curr_start"` > 0)
+
+      chop -start "$curr_start" -dur "$delta" "$output" > $run.$count.out
+      ln -s $run.labels $run.$count.labels
+
+      foreach ycol ("4")
+#     foreach ycol ('4 5 6 7 8 9 10')
+
+#        view_results -f $run.$count \
+#           -title "$title" $lpr $disp $options \
+#           -xcol 1 -ycol $ycol
+
+# VxB.L & Ne
+   view_results -f $run.$count -title "$title" $lpr $disp $options \
+      -xcol   1 \
+      -ycol   5 -yrange   1e10  1e13 -logy \
+      -ycol2  4 -yrange2  1000  5000
+
+# VxB.L & Te
+   view_results -f $run.$count -title "$title" $lpr $disp $options \
+      -xcol   1 \
+      -ycol   6 -yrange    500  3000 \
+      -ycol2  4 -yrange2  1000  5000
+
+      rm $run.$count.labels
+      rm $run.$count.out
+
+      set curr_start = `addgmt $curr_start $delta`
+      @ count ++
+   end
+end
+
+cleanup:
+
+rm $run.$count.labels
+rm $run.$count.out

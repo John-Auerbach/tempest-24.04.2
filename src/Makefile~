@@ -1,0 +1,242 @@
+# CONSTANT DEFINITIONS.
+
+# Include architecture information
+# (actually already in MACHINE variable
+
+
+# Include dbx debugging symbols.
+DEBUG=-g
+
+# Directories for targets and dependents.
+OBJ=../obj/$(ARCH)/
+BIN=../bin/$(ARCH)/
+
+# Shorthand for compiler invocation.
+CC=gcc
+INCDIRS=-I$(HOME)/tempest/science/include/$(ARCH) -I$(HOME)/tempest/science/include -I$(HOME)/tempest/f2c
+LIBDIRS=-L$(HOME)/tempest/science/lib/$(ARCH) -L$(HOME)/tempest/f2c/
+LIBS=-lorbit -learth -lam -lf2c -lm
+
+
+COMPILE=$(CC) $(INCDIRS) $(DEBUG) -o $@ -c
+F77=fort77 -c -o $@ $(INCDIRS) $(FDEBUG)    # F2C converter followed by gcc
+
+
+
+all		: \
+		  $(BIN)tempest \
+		  $(BIN)pp_tempest \
+		  $(BIN)addgmt $(BIN)compgmt $(BIN)diffgmt $(BIN)gmt2min \
+		  $(BIN)chop $(BIN)decimate $(BIN)diffygmt $(BIN)average \
+		  $(BIN)isbinarified $(BIN)binarifyhead $(BIN)binarifytail \
+                  $(BIN)unbinarify \
+		  $(BIN)eci2ephem $(BIN)ll2ephem 
+		  @echo 'All Done !!!'
+
+$(BIN)compgmt	: $(OBJ)compgmt.o $(OBJ)gmt.o
+		$(CC) $(OBJ)compgmt.o $(OBJ)gmt.o -o $@
+
+
+$(BIN)addgmt	: $(OBJ)addgmt.o $(OBJ)gmt.o
+		$(CC) $(OBJ)addgmt.o $(OBJ)gmt.o -o $@
+
+
+$(BIN)diffygmt	: $(OBJ)diffygmt.o $(OBJ)gmt.o
+		$(CC) $(OBJ)diffygmt.o $(OBJ)gmt.o -o $@
+
+
+$(BIN)diffgmt	: $(OBJ)diffgmt.o $(OBJ)gmt.o
+		$(CC) $(OBJ)diffgmt.o $(OBJ)gmt.o -o $@
+
+
+$(BIN)gmt2min	: $(OBJ)gmt2min.o $(OBJ)gmt.o
+		$(CC) $(OBJ)gmt2min.o $(OBJ)gmt.o -o $@
+
+
+$(BIN)chop	: $(OBJ)chop.o $(OBJ)gmt.o
+		$(CC) $(OBJ)chop.o $(OBJ)gmt.o -o $@
+
+
+$(BIN)average	: $(OBJ)average.o $(OBJ)gmt.o
+		$(CC) $(OBJ)average.o $(OBJ)gmt.o -o $@ $(LIBDIRS) $(LIBS)
+
+
+$(BIN)decimate	: $(OBJ)decimate.o $(OBJ)gmt.o
+		$(CC) $(OBJ)decimate.o $(OBJ)gmt.o -o $@
+
+
+$(BIN)isbinarified	: $(OBJ)isbinarified.o
+			$(CC) $(OBJ)isbinarified.o  -o $@
+	
+
+$(BIN)binarifyhead	: $(OBJ)binarifyhead.o $(OBJ)gmt.o
+			$(CC) $(OBJ)binarifyhead.o  $(OBJ)gmt.o -o $@
+	
+
+$(BIN)binarifytail	: $(OBJ)binarifytail.o $(OBJ)gmt.o
+			$(CC) $(OBJ)binarifytail.o  $(OBJ)gmt.o -o $@
+	
+
+$(BIN)unbinarify	: $(OBJ)unbinarify.o $(OBJ)gmt.o
+			$(CC) $(OBJ)unbinarify.o  $(OBJ)gmt.o -o $@
+	
+
+$(BIN)eci2ephem		: $(OBJ)eci2ephem.o
+			$(CC) $(OBJ)eci2ephem.o -o $@ \
+		  		$(LIBDIRS) $(LIBS) 
+
+$(BIN)ll2ephem		: $(OBJ)ll2ephem.o
+			$(CC) $(OBJ)ll2ephem.o $(OBJ)gmt.o \
+		  	  $(LIBDIRS) $(LIBS) -o $@ 
+
+
+$(BIN)pp_tempest	: $(OBJ)pp_tempest.o  $(OBJ)gmt.o
+			$(CC) \
+			  $(OBJ)pp_tempest.o $(OBJ)gmt.o \
+			  $(LIBDIRS) $(LIBS) -o $@
+	  
+
+$(BIN)tempest	: $(OBJ)tempest.o  $(OBJ)genorbit.o $(OBJ)tether.o   \
+		  $(OBJ)bfield.o   $(OBJ)emf.o      $(OBJ)temputil.o \
+		  $(OBJ)gmt.o      $(OBJ)iri.o \
+		  $(OBJ)iris12.o   $(OBJ)irif12.o   $(OBJ)cira86.o \
+		  $(OBJ)solarmag.o \
+		  $(OBJ)neutdens.o \
+		  $(OBJ)msis86.o   $(OBJ)msise90.o  \
+		  $(OBJ)global.o   $(OBJ)tss_current.o $(OBJ)plasma.o \
+		  $(OBJ)att.o      $(OBJ)bare_tether.o $(OBJ)hcpc.o
+		$(CC) $(INCDIRS) $(DEBUG) $(DT) -o $(OBJ)tempest.o -c tempest.c
+		$(CC) \
+		  $(OBJ)tempest.o  $(OBJ)genorbit.o $(OBJ)tether.o   \
+		  $(OBJ)bfield.o   $(OBJ)emf.o      $(OBJ)temputil.o \
+		  $(OBJ)gmt.o      $(OBJ)iri.o      $(OBJ)iris12.o   \
+		  $(OBJ)irif12.o   $(OBJ)cira86.o   $(OBJ)solarmag.o \
+		  $(OBJ)neutdens.o $(OBJ)msis86.o   $(OBJ)msise90.o  \
+		  $(OBJ)global.o   $(OBJ)tss_current.o $(OBJ)plasma.o \
+		  $(OBJ)att.o      $(OBJ)bare_tether.o $(OBJ)hcpc.o \
+		  $(LIBDIRS) $(LIBS) -o $(BIN)tempest 
+
+
+$(OBJ)tempest.o		: tempest.c types.h gmt.h genorbit.h tether.h \
+			  bfield.h emf.h iri.h solarmag.h neutdens.h  \
+			  tempest.h global.h tss_current.h plasma.h   \
+                          att.h bare_tether.h temputil.h
+			$(COMPILE) tempest.c
+
+$(OBJ)genorbit.o	: genorbit.c types.h gmt.h tempest.h temputil.h \
+			  genorbit.h fastorbit.c
+			$(COMPILE) genorbit.c
+
+$(OBJ)tether.o		: tether.c types.h gmt.h tempest.h temputil.h \
+			  genorbit.h tether.h
+			$(COMPILE) tether.c
+
+$(OBJ)bfield.o		: bfield.c types.h gmt.h tempest.h temputil.h \
+			  genorbit.h tether.h bfield.h
+			$(COMPILE) bfield.c
+
+$(OBJ)emf.o		: emf.c types.h gmt.h tempest.h temputil.h \
+			  genorbit.h tether.h bfield.h emf.h
+			$(COMPILE) emf.c
+
+$(OBJ)temputil.o	: temputil.c types.h tempest.h temputil.h \
+			  genorbit.h tether.h bfield.h emf.h
+			$(COMPILE) temputil.c
+
+$(OBJ)gmt.o		: gmt.c types.h tempest.h gmt.h
+			$(COMPILE) gmt.c
+
+$(OBJ)iri.o		: iri.c types.h tempest.h gmt.h temputil.h \
+			  genorbit.h iri.h
+			$(COMPILE) iri.c
+
+$(OBJ)iris12.o		: iris12.f
+			$(F77) iris12.f
+
+$(OBJ)irif12.o		: irif12.f
+			$(F77) irif12.f
+
+$(OBJ)cira86.o		: cira86.f
+			$(F77) cira86.f
+
+$(OBJ)solarmag.o	: solarmag.c types.h tempest.h gmt.h temputil.h \
+			  solarmag.h
+			$(COMPILE) solarmag.c
+
+$(OBJ)neutdens.o	: neutdens.c types.h tempest.h gmt.h temputil.h \
+			  neutdens.h
+			$(COMPILE) neutdens.c
+
+$(OBJ)msis86.o		: msis86.f
+			$(F77) msis86.f
+
+$(OBJ)msise90.o		: msise90.f
+			$(F77) msise90.f
+
+$(OBJ)global.o		: global.c types.h gmt.h tempest.h temputil.h global.h
+			 $(COMPILE) global.c
+
+$(OBJ)tss_current.o	: tss_current.c types.h gmt.h tempest.h temputil.h \
+			  emf.h tss_current.h
+			$(COMPILE) tss_current.c
+
+$(OBJ)plasma.o		: plasma.c types.h gmt.h tempest.h temputil.h \
+			  iri.h bfield.h plasma.h
+			$(COMPILE) plasma.c
+
+$(OBJ)att.o		: att.c types.h gmt.h tempest.h temputil.h att.h
+			$(COMPILE) att.c
+
+$(OBJ)bare_tether.o	: bare_tether.c types.h gmt.h tempest.h temputil.h \
+			  emf.h bare_tether.h
+			$(COMPILE) bare_tether.c
+
+$(OBJ)hcpc.o		: hcpc.c hcpc.h
+			$(COMPILE) hcpc.c
+
+###### 
+
+$(OBJ)pp_tempest.o	: pp_tempest.c types.h tempest.h gmt.h
+			$(COMPILE) pp_tempest.c
+
+$(OBJ)addgmt.o		: addgmt.c gmt.h 
+			$(COMPILE) addgmt.c
+
+$(OBJ)compgmt.o		: compgmt.c gmt.h 
+			$(COMPILE) compgmt.c
+
+$(OBJ)diffygmt.o	: diffygmt.c gmt.h 
+			$(COMPILE) diffygmt.c
+
+$(OBJ)diffgmt.o		: diffgmt.c gmt.h 
+			$(COMPILE) diffgmt.c
+
+$(OBJ)gmt2min.o		: gmt2min.c gmt.h 
+			$(COMPILE) gmt2min.c
+
+$(OBJ)average.o		: average.c gmt.h 
+			$(COMPILE) average.c
+
+$(OBJ)decimate.o	: decimate.c gmt.h 
+			$(COMPILE) decimate.c
+
+$(OBJ)isbinarified.o	: isbinarified.c
+			$(COMPILE) isbinarified.c
+
+$(OBJ)binarifyhead.o	: binarifyhead.c gmt.h
+			$(COMPILE) binarifyhead.c
+
+$(OBJ)binarifytail.o	: binarifytail.c gmt.h
+			$(COMPILE) binarifytail.c
+
+$(OBJ)unbinarify.o	: unbinarify.c gmt.h
+			$(COMPILE) unbinarify.c
+
+$(OBJ)eci2ephem.o	: eci2ephem.c
+			$(COMPILE) eci2ephem.c
+
+$(OBJ)ll2ephem.o	: ll2ephem.c
+			$(COMPILE) ll2ephem.c
+
+$(OBJ)chop.o		: chop.c gmt.h
+			$(COMPILE) chop.c

@@ -1,0 +1,155 @@
+#!/bin/csh -f
+
+if (("$1" == '') || ("$1" == '-help') || ("$1" == '-doc') || ($#argv < 1)) then
+
+cat << EOM
+
+Usage:		genplot		-data <data filename> -plotl <plotl file>
+				-start <start time> -end <end time>
+				-delta <delta time>
+				[-lpr] [-nodisp] [-rmps]
+
+EOM
+
+   if (("$1" == '-help') || ("$1" == '-doc')) then
+cat << EOH
+EOH
+   endif
+   exit
+endif
+
+onintr cleanup
+
+##############################################################################
+# set up some defaults
+
+set datain	 	= ''
+set plotlfile		= ''
+set start		= ''
+set end			= ''
+set delta		= '000/06:00:00.000'
+set print		= 0
+set display		= 1
+set rmps     		= 0
+set sumplotcreated	= 0
+
+##############################################################################
+#now read in command line arguments
+
+set no_args = $#argv
+set cnt = 1
+
+while ($no_args >= $cnt )
+
+   switch ("$argv[$cnt]")
+      case '-data' :
+         @ cnt++
+         set datain = "$argv[$cnt]"
+         breaksw
+      case '-plotl' :
+         @ cnt++
+         set plotlfile = "$argv[$cnt]"
+         breaksw
+      case '-start' :
+         @ cnt++
+         set start  = "$argv[$cnt]"
+         breaksw
+      case '-end' :
+         @ cnt++
+         set start  = "$argv[$cnt]"
+         breaksw
+      case '-delta' :
+         @ cnt++
+         set delta  = "$argv[$cnt]"
+         breaksw
+      case '-lpr' :
+         set print = 1
+         breaksw
+      case '-nodisp' :
+         set display = 0 
+         breaksw
+      case '-rmps' :
+         set rmps = 1
+         breaksw
+      default :
+         echo ''
+         echo ' Parameter Error ['"$argv[$cnt]"']'
+         echo ' '
+         exit(1)
+   endsw
+
+   @ cnt = $cnt + 1
+end
+
+if ("$datain" == '') then
+   echo '^G'
+   echo ' Must specify a data filename (-data)\!'
+   echo ' '
+   exit (1)
+endif
+
+if ("$plotlfile" == '') then
+   echo '^G'
+   echo ' Must specify a plotl file filename (-plotl)\!'
+   echo ' '
+   exit (1)
+endif
+
+set binarified = `isbinarified -f "$datain"`
+
+if ("$start" == '') then
+   if ("$binarified" == '0') then
+      set line = 1
+      while (`head -"$line" "$datain" | tail -1 | gawk '{print $1}'` == '#')
+         @ line ++
+      end
+
+      set start = `head -"$line" "$datain" | tail -1 | gawk '{print $1}'`
+   else
+      set start = `binarifyhead -f "$datain" -gmt`
+   endif
+endif
+
+if ("$end" == '') then
+   if ("$binarified" == '0') then
+      set end = `tail -1 "$datain" | gawk '{print $1}'`
+   else
+      set end = `binarifytail -f "$datain" -gmt`
+   endif
+endif
+
+set curr_start = $start
+set count      = 1
+
+set titletail  = '%titletail=('"$datain:r"')'
+
+while (`compgmt "$end" "$curr_start"` > 0)
+   chop -start "$curr_start" -dur "$delta" -f "$datain" -o genplot.data.$$
+
+   set curr_end = `addgmt "$curr_start" "$delta"`
+
+   echo 'Generating plot for '"$delta"' starting '"$curr_start"' ending '"$curr_end"
+
+   set psout = "$plotlfile:r"'.'"$datain:r"'.'"$count"'.ps'
+
+   set xrange = '%x_min='"$curr_start"' ; %x_max='"$curr_end"
+
+   echo 'Plotting'
+
+   plotl -qt "$titletail" "$xrange" -o $psout
+   		"data genplot.data.$$" "$plotlfile" -o $psout
+
+   if ($print) lpr $psout
+
+   if ($display) ghostview -geometry +10+10 $psout
+
+   if ($rmps) rm -f $psout
+
+   set curr_start = `addgmt "$curr_start" "$delta"`
+   @ count ++
+   echo ' '
+end
+
+cleanup:
+
+if (-e genplot.data.$$) rm -f genplot.data.$$

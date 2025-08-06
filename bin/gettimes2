@@ -1,0 +1,76 @@
+#!/bin/csh -f
+
+if (("$1" == '-help') || ("$1" == '-doc')) then
+more << EOM
+
+Usage:    runall        [-f <fileheader>] [-nominmax] [-pout]
+                        [-addopt <additional TEMPEST options>]
+
+EOM
+
+   if ("$1" == '-doc') then
+more << EOH
+
+EOH
+   endif
+   exit
+endif
+
+onintr cleanup
+
+##############################################################################
+#default settings
+
+set files   = '*.errlog'
+
+##############################################################################
+#now read in command line arguments
+
+set no_args = $#argv
+set cnt = 1
+
+while ($no_args >= $cnt )
+
+   switch ("$argv[$cnt]")
+      case '-f' :
+         @ cnt++
+         set files = "$argv[$cnt]"
+         breaksw
+      case ' ' :
+         breaksw
+      default :
+         echo ''
+         echo ' ^GParameter Error ['"$argv[$cnt]"'] - use -help  for usage'
+         echo ' '
+         exit(1)
+   endsw
+
+   @ cnt = $cnt + 1
+
+end
+
+foreach i (`ls $files`)
+   set start = `grep Starting $i`
+   set stop  = `grep Stopping $i`
+
+   set minimax = $i:r'.minmax'
+
+   set lowalt = `awk '{print $5}' $minimax | head -4 | tail -1`
+
+   if ($#start >= 2) then
+      set start_date = $start[4]
+      set start_year = $start[5]
+
+      if ($#stop >= 2) then
+         set stop_date  = $stop[4]
+         set stop_year  = $stop[5]
+
+         set diff = `diffygmt $stop_date $stop_year $start_date $start_year`
+         set diffmin = `gmt2min $diff[1]`
+   
+         set years = `echo "$diff[2]+$diffmin/(365.25*24*60)" | bc -l`
+  
+         echo $i:r $years $lowalt
+      endif
+   endif
+end

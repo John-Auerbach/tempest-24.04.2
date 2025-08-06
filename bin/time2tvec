@@ -1,0 +1,32 @@
+#!/bin/csh -f
+
+# file: time2tvec
+
+if ($1 == "-help") then
+
+echo ' '
+echo 'Usage: time5tvec ["ddd/hh:mm:ss.xxxxxx"]'
+echo ' '
+echo 'where the given time is of the form shown (or with valid'
+echo 'separators of [/:,. ]).  If no command line argument is present,'
+echo 'input is taken from stdin.  Note that a blank line is treated'
+echo 'as 000/00:00:00.000, and missing entries are treated as zero.'
+echo ' '
+
+exit
+endif
+
+
+
+if ($1 == "") then
+awk -F"/"  '{ print $1, $2, $3, $4, $5 }' \
+   | awk -F":"  '{ print $1, $2, $3, $4, $5 }' \
+   | awk -F"."  '{ print $1, $2, $3, $4, $5 }' \
+   | awk -F","  '{ print $1, $2, $3, $4, $5 }' \
+   | awk -F" "  '{ printf("%03s %02s %02s %02s %06s\n", $1, $2, $3, $4, $5) }'
+else
+echo "$*" | awk -F"/"  '{ print $1, $2, $3, $4 }' \
+          | awk -F":"  '{ print $1, $2, $3, $4 }' \
+          | awk -F"."  '{ print $1, $2, $3, $4 }' \
+          | awk -F" "  '{ printf("%03s %02s %02s %02s\n", $1, $2, $3, $4) }' 
+endif

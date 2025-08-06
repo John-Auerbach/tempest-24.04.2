@@ -1,0 +1,189 @@
+#!/bin/csh -f
+#
+#
+
+if (("$1" == '') || ("$1" == '-help') || ("$1" == '-doc') || ($#argv < 2)) then
+   echo ' '
+   echo 'Usage:    vary         -f <filename> -o <fileheader>'
+   echo '                       -var <variable> -range <start> <stop> <incr>'
+   echo '                       [-noheader] [-plotl] [-tdelim] [-met] [-nogmt] [-minmax]'
+   echo '                       [-pscript name] [-title titlehead]'
+   echo ' '
+
+   if (("$1" == '-help') || ("$1" == '-doc')) then
+      echo 'This script will run the tether simulation TEMPEST many times as it'
+      echo 'varies a given value over the specified range.  The following'
+      echo 'command will be repeated many times:'
+      echo ' '
+      echo '   tempest -f <filename> -nopshow'
+      echo '           -var <variable> <value> -o <filename>'
+      echo '           <and any other tempest parameters specified>'
+      echo ' '
+      echo 'where <value> is specified by the -range arguments.'
+      echo 'If a -o filename header is specified, the the data files from all'
+      echo 'the runs are saved in files with names of filehead.<variable>_<value>.'
+      echo 'The -pscript parameter allows one to process the data with another'
+      echo 'script (for plotting etc.) where the first parameter in the script'
+      echo 'is the data file''s name, and the second parameter is a title prefix that'
+      echo 'can be used for plots.  The title is automatically generated as'
+      echo '<titlehead> (<variable> = <value>).'
+      echo ' '
+      echo 'If either -minmax, or -plotl are specified, then the tempest'
+      echo 'program saves the minima and maxima in filehead.<variable>_<value>.minmax'
+      echo 'and the column labels in filehead.<variable>_<value>.labels.'
+      echo ' '
+   endif
+
+   exit
+endif
+
+#default settings
+
+set par_file   = ''
+set vvar       = ''
+set start      = ''
+set stop       = ''
+set incr       = ''
+set dat_file   = ''
+set pscript    = ''
+set titlehead  = ''
+set tempest_sw = ''
+set minmax     = 0
+set plotl      = 0
+
+#now read in command line arguments
+
+set no_args = $#argv
+set cnt = 1
+
+while ($no_args >= $cnt )
+
+   switch ("$argv[$cnt]")
+      case '-f' :
+         @ cnt++
+         set par_file  = "$argv[$cnt]"
+         breaksw
+      case '-var' :
+         @ cnt++
+         set vvar      = "$argv[$cnt]"
+         breaksw
+      case '-range' :
+         @ cnt++
+         set start     = "$argv[$cnt]"
+         @ cnt++
+         set stop      = "$argv[$cnt]"
+         @ cnt++
+         set incr      = "$argv[$cnt]"
+         breaksw
+      case '-o' :
+         @ cnt++
+         set dat_file  = "$argv[$cnt]"
+         breaksw
+      case '-pscript' :
+         @ cnt++
+         set pscript   = "$argv[$cnt]"
+         breaksw
+      case '-title' :
+         @ cnt++
+         set titlehead = "$argv[$cnt]"
+         breaksw
+      case '-noheader' :
+         set tempest_sw = "$argv[$cnt]"' '"$tempest_sw"
+         breaksw
+      case '-tdelim'   :
+         set tempest_sw = "$argv[$cnt]"' '"$tempest_sw"
+         breaksw
+      case '-met'      :
+         set tempest_sw = "$argv[$cnt]"' '"$tempest_sw"
+         breaksw
+      case '-nogmt'    :
+         set tempest_sw = "$argv[$cnt]"' '"$tempest_sw"
+         breaksw
+      case '-minmax'   :
+         set minmax = 1
+         breaksw
+      case '-plotl'    :
+         set plotl = 1 
+         breaksw
+      case ' ' :
+         breaksw
+      default :
+         echo ' '
+         echo ' Parameter Error ['"$argv[$cnt]"'] - type "vary" for usage'
+         echo ' '
+         exit(1)
+   endsw
+
+   @ cnt = $cnt + 1
+
+end
+
+if ($par_file == "") then
+   echo ' '
+   echo ' Must specify a parameter file (-f <filename>) \!'
+   echo ' '
+   exit (1)
+endif
+
+if ($vvar == "") then
+   echo ' '
+   echo ' Must specify a variable to vary (-var <variable name>) \!'
+   echo ' '
+   exit (1)
+endif
+
+if ($start == "" || $stop == "" || $incr == "") then
+   echo ' '
+   echo ' Must completely specify range over which to vary (-range <...>) \!'
+   echo ' '
+   exit (1)
+endif
+
+# Make a list of the varying paramete values
+
+echo 'for (p='"$start"';p<='"$stop"';p+='"$incr"') p' > vary.tmp.$$
+echo 'quit' >> vary.tmp.$$
+
+set p_list = `bc -l vary.tmp.$$`
+
+rm vary.tmp.$$
+
+# Now perform the simulations
+
+foreach par_val ($p_list)
+   echo 'Performing tether simulation with '"$vvar"' = '"$par_val"
+
+   if ("$dat_file" == '') then
+      set out_file = out_file.$$
+   else
+      set out_file = "$dat_file"'.'"$vvar"'_'"$par_val" 
+   endif
+
+   if ($minmax) then
+      set minmax_sw = '-mout '"$out_file"'.minmax'
+   else
+      set minmax_sw = ''
+   endif
+
+   if ($plotl) then
+      set plotl_sw = '-lout '"$out_file"'.labels'
+   else
+      set plotl_sw = ''
+   endif
+
+   set out_file = "$out_file"'.out'
+
+   tempest -f $par_file -nopshow -var $vvar $par_val -o $out_file $minmax_sw $plotl_sw $tempest_sw
+
+   if ("$pscript" != '') then
+      set plot_title = "$titlehead"' ('"$vvar"' = '"$par_val"')'
+
+      $pscript "$out_file" "$plot_title"
+   endif
+
+   if ("$dat_file" == '') then
+      rm outfile.$$
+      rm outfile.$$.minmax
+      rm outfile.$$.labels
+   endif
+end
