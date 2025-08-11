@@ -64,12 +64,6 @@ def plot_altitude_vs_time(time_hours, altitude_km, perigee_km, apogee_km, atm_dr
     ax2.grid(True, alpha=0.3)
     ax2.legend(fontsize=10, loc='upper right')
     
-    # stats box for drag
-    drag_stats = f'''Max Drag: {atm_drag_n.max():.3f} N\nMin Drag: {atm_drag_n.min():.3f} N'''
-    ax2.text(0.02, 0.98, drag_stats, transform=ax2.transAxes, 
-             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8),
-             fontsize=9, fontfamily='monospace')
-    
     # save plot
     plt.tight_layout()
     plt.savefig(output_file, dpi=300, bbox_inches='tight')
