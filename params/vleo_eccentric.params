@@ -1,0 +1,70 @@
+# Eccentric VLEO Orbit
+
+#### EPOCH PARAMETERS ####
+Ephemeris_Year	= 2024
+Ephemeris_Time	= 001/00:00:00
+
+# Eccentric orbit parameters
+Perigee_Alt     = 150000 # m
+Apogee_Alt      = 600000 # m
+Inclination	= 28.5
+RAAN		= 0.0
+Arg_Perigee	= 0.0
+Anomaly_Type	= True
+True_Anomaly	= 0.0       # start at perigee
+
+######### Simulation Parameters #######
+Orbit_Perturb	=  Yes      # include perturbations (J2, drag, etc)
+Orbit_Decay	=  Yes      # include atmospheric drag effects
+Orbit_Precise   =  Yes      # high-precision orbit model
+Ephem_From_RV	=  Yes
+
+######## Libration Parameters (minimal for drag study) #####
+InPlane_Lib     =   0.00
+OutofPlane_Lib  =   0.00
+Radial_Lib      =   0.00
+IP_Phase	=   0.00
+OP_Phase	=   0.00
+Rad_Phase	=   0.00
+
+######## Simulation Time Parameters #####
+Start_Year	= 2024
+Start_Time	= 001/00:00:00.000
+Stop_Year	= 2024
+Stop_Time	= 001/12:00:00.000    # 12 hours to see multiple orbits
+######## MET0 Time = Launch time #####
+MET0_Year	= 2024
+MET0_Time	= 001/00:00:00.00
+
+###################################################################
+# Time increment
+Time_Incr	= 000/00:00:10.000
+SS_Output	= 5                    # Output every _ time steps
+
+###################################################################
+# Tether configuration (minimal for drag study)
+Tether_End      = 1000.0     # 1 km tether
+Bare_Start	=  0.0
+Bare_End	= 1000.0
+T_Resistivity	= 0.00000282   # ohms * cm (Aluminum)
+T_Cond_Radius	= 0.000225     # meters (25 AWG)
+Bare_Segments	= 100
+
+###################################################################
+# Atmospheric drag parameters
+Drag_Coeff      = 2.2        # typical drag coeff
+Drag_Area       = 10.0       # cross-sectional area (m^2)
+
+###################################################################
+# Output variables - Focus on orbital dynamics and computed drag
+Show_Vars	= MET_DAYS
+Show_Vars	= MET_HOURS
+Show_Vars	= ALTITUDE_J2
+Show_Vars	= ALT_MER
+Show_Vars	= PERIGEE_ALT
+Show_Vars	= APOGEE_ALT
+Show_Vars	= LATITUDE
+Show_Vars	= LONGITUDE
+Show_Vars	= ECCENTRICITY
+Show_Vars	= TRUE_ANOMALY
+Show_Vars	= ATM_DRAG
