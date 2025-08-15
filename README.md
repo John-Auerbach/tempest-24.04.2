@@ -1,0 +1,1 @@
+TEMPEST is a space tether simulation program designed to model the electrodynamics of tethered satellite systems in Earth orbit. The simulation includes orbital mechanics, electromagnetic fields, plasma physics, atmospheric models, and simple tether dynamics. Recent work has involved updating legacy code to run on modern Ubuntu distributions and running sample simulations. 
