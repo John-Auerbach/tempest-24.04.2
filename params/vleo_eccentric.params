@@ -51,9 +51,14 @@ T_Cond_Radius	= 0.000225     # meters (25 AWG)
 Bare_Segments	= 100
 
 ###################################################################
-# Atmospheric drag parameters
-Drag_Coeff      = 2.2        # typical drag coeff
-Drag_Area       = 10.0       # cross-sectional area (m^2)
+# Atmospheric model parameters
+PREFER_MSISE90 = No    # Use MSIS-86 model (default)
+USE_NRLMSIS = Yes      # Use modern NRLMSIS atmospheric model
+
+# Drag Parameters
+SYSTEM_MASS = 200.0    # Total mass of tethered system (kg)
+BAL_COEFF = 9.09       # Ballistic coefficient (mass[kg]/(drag_coeff*area[m^2]))
+                        # 200.0 / (2.2 * 10.0)
 
 ###################################################################
 # Output variables - Focus on orbital dynamics and computed drag
