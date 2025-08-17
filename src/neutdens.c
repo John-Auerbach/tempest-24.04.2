@@ -62,6 +62,111 @@ real       dens_out [8]  ;
 real       temp_out [2]  ;
 ftnlen     data_path_len ;
 
+/* Simple in-memory store for NRLMSIS CSV file */
+typedef struct {
+   double epoch; /* seconds since epoch (UTC) */
+   double lat;   /* degrees */
+   double lon;   /* degrees */
+   double alt;   /* meters */
+   double dens[8]; /* He,O,N2,O2,Ar,unused,mass,H,N -> follow dens_out order */
+   double temps[2]; /* exo, atalt */
+} nrl_row_t;
+
+static nrl_row_t *nrl_table = NULL;
+static size_t nrl_table_len = 0;
+static int nrl_table_loaded = 0;
+
+/* Parse a CSV line. Very permissive; expects numeric columns in known order. */
+static int load_nrl_csv (const char *path)
+{
+   FILE *f = fopen (path, "r") ;
+   char line[2048];
+   size_t cap = 0;
+   size_t idx = 0;
+   if (!f) return 0;
+   /* Free previous table */
+   if (nrl_table) { free(nrl_table); nrl_table = NULL; nrl_table_len = 0; }
+
+   while (fgets(line, sizeof(line), f))
+   {
+      /* Skip header lines starting with # or non-digit */
+      char *s = line;
+      while (*s == ' ' || *s == '\t') s++;
+      if (*s == '#' || *s == '\0' || *s == '\n') continue;
+
+      /* columns expected: time_iso, lat, lon, alt_m, he, o, n2, o2, ar, h, n, mass, texo, talt */
+      double t_lat, t_lon, t_alt;
+      double he,o,n2,o2,ar,h,n,mass,texo,talt;
+      char time_iso[64];
+      int got = sscanf(line, "%63[^,],%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf",
+                       time_iso, &t_lat, &t_lon, &t_alt,
+                       &he,&o,&n2,&o2,&ar,&h,&n,&mass,&texo,&talt);
+      if (got < 14) continue;
+
+      /* convert time_iso (ISO 8601) to epoch seconds if possible; fallback to 0 */
+      double epoch = 0.0;
+      struct tm tmv; memset(&tmv,0,sizeof(tmv));
+      if (strptime(time_iso, "%Y-%m-%dT%H:%M:%S", &tmv) != NULL) {
+          epoch = (double) timegm(&tmv);
+      }
+
+      nrl_row_t r;
+      r.epoch = epoch;
+      r.lat = t_lat;
+      r.lon = t_lon;
+      r.alt = t_alt;
+      r.dens[0] = he;
+      r.dens[1] = o;
+      r.dens[2] = n2;
+      r.dens[3] = o2;
+      r.dens[4] = ar;
+      r.dens[5] = 0.0; /* placeholder for unused slot to match dens_out */
+      r.dens[6] = mass; /* mass placed into dens[6] to map to dens_out[5] later */
+      r.dens[7] = h;
+      /* note: N placed separately for dens[7] is not perfect mapping, keep n in temps[0] spare */
+      r.temps[0] = texo;
+      r.temps[1] = talt;
+
+      nrl_table = (nrl_row_t*) realloc (nrl_table, (cap+1) * sizeof(nrl_row_t));
+      if (!nrl_table) { fclose(f); return 0; }
+      nrl_table[cap] = r;
+      cap++;
+   }
+   fclose(f);
+   nrl_table_len = cap;
+   nrl_table_loaded = (nrl_table_len>0);
+   return nrl_table_loaded;
+}
+
+/* Simple nearest-row lookup by time and altitude. If no rows loaded return 0. */
+static int lookup_nrl_values (double epoch, double lat, double lon, double alt_m,
+                              double out_dens[8], double out_temps[2])
+{
+   if (!nrl_table_loaded) return 0;
+   size_t best = 0;
+   double best_score = 1e308;
+   for (size_t i=0;i<nrl_table_len;i++)
+   {
+      double dt = nrl_table[i].epoch - epoch;
+      if (nrl_table[i].epoch == 0.0) dt = 0.0; /* unknown times match equally */
+      double da = (nrl_table[i].alt - alt_m);
+      double score = fabs(dt) + fabs(da)/1000.0; /* simple combined metric */
+      if (score < best_score) { best_score = score; best = i; }
+   }
+   /* map values back to expected dens_out order: dens_out[0]=He, [1]=O, [2]=N2, [3]=O2, [4]=Ar, [5]=mass, [6]=H, [7]=N */
+   out_dens[0] = nrl_table[best].dens[0];
+   out_dens[1] = nrl_table[best].dens[1];
+   out_dens[2] = nrl_table[best].dens[2];
+   out_dens[3] = nrl_table[best].dens[3];
+   out_dens[4] = nrl_table[best].dens[4];
+   out_dens[5] = nrl_table[best].dens[6]; /* mass */
+   out_dens[6] = nrl_table[best].dens[7]; /* H */
+   out_dens[7] = 0.0; /* N not parsed separately */
+   out_temps[0] = nrl_table[best].temps[0];
+   out_temps[1] = nrl_table[best].temps[1];
+   return 1;
+}
+
 
 
 void init_neutral_densities    ()
@@ -120,10 +225,32 @@ if (show_debug && DEBUG_NEUTDENS)
 #endif
    if (altitude < 85.0)
    {                                /* Need to use MSISE-90 (0 to 400km)     */
-      gts6_ (&yyddd, &utsec, &altitude, &geod_lat, &geod_long, &loc_sol_time, 
-             &f107_3ma, &f107_d, daily_ap, &msis_mass,
-             dens_out, temp_out) ;
-      strcpy (neutdens_model, neutdens_msise90) ;
+      if (use_nrlmsis) {
+         /* load table lazily */
+         if (!nrl_table_loaded && strlen(nrlmsis_datafile) > 0) {
+            load_nrl_csv (nrlmsis_datafile) ;
+         }
+         double epoch_seconds = (double) GMT_Secs (&curr_gmt) ;
+         double outd[8], outt[2];
+         if (lookup_nrl_values (epoch_seconds, (double) sat_r_lla.Lat * R_D_CONST,
+                                (double) sat_r_lla.Long < 0 ? (double)(sat_r_lla.Long*R_D_CONST+360.0) : (double)(sat_r_lla.Long*R_D_CONST),
+                                sat_r_lla.Alt, outd, outt))
+         {
+            for (int i=0;i<8;i++) dens_out[i] = (real) outd[i];
+            temp_out[0] = (real) outt[0]; temp_out[1] = (real) outt[1];
+            strcpy (neutdens_model, "NRLMSIS") ;
+         } else {
+            gts6_ (&yyddd, &utsec, &altitude, &geod_lat, &geod_long, &loc_sol_time, 
+                   &f107_3ma, &f107_d, daily_ap, &msis_mass,
+                   dens_out, temp_out) ;
+            strcpy (neutdens_model, neutdens_msise90) ;
+         }
+      } else {
+         gts6_ (&yyddd, &utsec, &altitude, &geod_lat, &geod_long, &loc_sol_time, 
+                &f107_3ma, &f107_d, daily_ap, &msis_mass,
+                dens_out, temp_out) ;
+         strcpy (neutdens_model, neutdens_msise90) ;
+      }
    }
    else if (altitude > 400.0)
    {                                /* Need to use MSIS-86 (85 to 1000km)    */
@@ -138,10 +265,29 @@ if (show_debug && DEBUG_NEUTDENS)
    {
       if (neutdens_prefer_msise_90)
       {
-         gts6_ (&yyddd, &utsec, &altitude, &geod_lat, &geod_long, &loc_sol_time,
-                &f107_3ma, &f107_d, daily_ap, &msis_mass,
-                dens_out, temp_out) ;
-         strcpy (neutdens_model, neutdens_msise90) ;
+         if (use_nrlmsis) {
+            if (!nrl_table_loaded && strlen(nrlmsis_datafile) > 0) load_nrl_csv(nrlmsis_datafile);
+            double epoch_seconds = (double) GMT_Secs (&curr_gmt) ;
+            double outd[8], outt[2];
+            if (lookup_nrl_values (epoch_seconds, (double) sat_r_lla.Lat * R_D_CONST,
+                                   (double) sat_r_lla.Long < 0 ? (double)(sat_r_lla.Long*R_D_CONST+360.0) : (double)(sat_r_lla.Long*R_D_CONST),
+                                   sat_r_lla.Alt, outd, outt))
+            {
+               for (int i=0;i<8;i++) dens_out[i] = (real) outd[i];
+               temp_out[0] = (real) outt[0]; temp_out[1] = (real) outt[1];
+               strcpy (neutdens_model, "NRLMSIS") ;
+            } else {
+               gts6_ (&yyddd, &utsec, &altitude, &geod_lat, &geod_long, &loc_sol_time,
+                     &f107_3ma, &f107_d, daily_ap, &msis_mass,
+                     dens_out, temp_out) ;
+               strcpy (neutdens_model, neutdens_msise90) ;
+            }
+         } else {
+            gts6_ (&yyddd, &utsec, &altitude, &geod_lat, &geod_long, &loc_sol_time,
+                   &f107_3ma, &f107_d, daily_ap, &msis_mass,
+                   dens_out, temp_out) ;
+            strcpy (neutdens_model, neutdens_msise90) ;
+         }
       }
       else
       {
