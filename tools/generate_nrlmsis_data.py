@@ -1,20 +1,29 @@
 #!/usr/bin/env python3
 """
-Simple NRLMSIS CSV generator skeleton.
+NRLMSIS CSV generator using pymsis library.
 Generates CSV rows: time_iso,lat,lon,alt_m,he,o,n2,o2,ar,h,n,mass,texo,talt
 
-This script uses the nrlmsis2 library if available; otherwise it writes a stub.
+This script uses the pymsis library to generate real atmospheric data.
 Modified to work without command line arguments - configure parameters below.
 """
 import argparse
 from datetime import datetime, timedelta
 import csv
+import numpy as np
 
 try:
-    import nrlmsis2
-    HAVE_NRL = True
-except Exception:
-    HAVE_NRL = False
+    import pymsis
+    HAVE_PYMSIS = True
+    print("pymsis library loaded successfully")
+except ImportError:
+    HAVE_PYMSIS = False
+    print("ERROR: pymsis library is not installed!")
+    print("Install it with: pip install pymsis")
+    print("Cannot generate atmospheric data without real NRLMSIS library.")
+except Exception as e:
+    HAVE_PYMSIS = False
+    print(f"ERROR: Failed to import pymsis: {e}")
+    print("Cannot generate atmospheric data without real NRLMSIS library.")
 
 # Configuration parameters - modify these as needed
 DEFAULT_CONFIG = {
@@ -23,7 +32,7 @@ DEFAULT_CONFIG = {
     'dt': '60',  # time step in seconds
     'lat': 0.0,  # latitude in degrees
     'lon': 0.0,  # longitude in degrees
-    'alts': '400000,500000,600000',  # comma separated altitudes in meters
+    'alts': '150000,200000,250000,300000,350000,400000,450000,500000,550000,600000',  # comma separated altitudes in meters
     'f107': 150.0,  # solar flux index
     'ap': 4.0,  # geomagnetic index
     'output': 'nrlmsis_output.csv'
@@ -59,6 +68,13 @@ def run_with_custom_config(**kwargs):
 
 def generate(config=None):
     """Generate NRLMSIS data using either provided config or command line args"""
+    
+    # Fail if NRLMSIS library is not available
+    if not HAVE_PYMSIS:
+        raise RuntimeError(
+            "pymsis library not available! Install the library with: pip install pymsis\n"
+        )
+    
     if config is None:
         # If no config provided, use command line arguments (backward compatibility)
         import sys
@@ -88,41 +104,56 @@ def generate(config=None):
     end = datetime.fromisoformat(config.end)
     dt = int(config.dt)
     alt_list = [float(x) for x in config.alts.split(',')]
+    alt_km_list = [alt/1000.0 for alt in alt_list]  # Convert to km for pymsis
 
-    with open(config.output,'w',newline='') as f:
+    # Construct output path relative to tools directory
+    output_path = f"../data/{config.output}"
+    
+    with open(output_path,'w',newline='') as f:
         w = csv.writer(f)
         w.writerow(['# time_iso','lat_deg','lon_deg','alt_m','he_#/m3','o_#/m3','n2_#/m3','o2_#/m3','ar_#/m3','h_#/m3','n_#/m3','mass_kg_m3','texo_k','talt_k'])
+        
         t = start
         while t <= end:
-            for alt in alt_list:
-                if HAVE_NRL:
-                    # Call into nrlmsis2 - this is a placeholder; users must adapt to api
-                    out = nrlmsis2.run(t, config.lat, config.lon, alt/1000.0, f107=config.f107, ap=config.ap)
-                    # out should provide species number densities and temps; adapt as needed
-                    he = out.get('he',0.0)
-                    o  = out.get('o',0.0)
-                    n2 = out.get('n2',0.0)
-                    o2 = out.get('o2',0.0)
-                    ar = out.get('ar',0.0)
-                    h_ = out.get('h',0.0)
-                    n_ = out.get('n',0.0)
-                    mass = out.get('mass',0.0)
-                    texo = out.get('texo',0.0)
-                    talt = out.get('talt',0.0)
-                else:
-                    # stub/demo values
-                    he = 1e5
-                    o  = 1e10
-                    n2 = 1e11
-                    o2 = 1e10
-                    ar = 1e9
-                    h_ = 1e7
-                    n_ = 1e8
-                    mass = 1e-12
-                    texo = 800.0
-                    talt = 250.0
-                w.writerow([t.strftime('%Y-%m-%dT%H:%M:%S'), config.lat, config.lon, alt, he, o, n2, o2, ar, h_, n_, mass, texo, talt])
+            # Convert datetime to numpy datetime64 for pymsis
+            time_np = np.array([t], dtype='datetime64')
+            
+            # Calculate atmospheric data for all altitudes at once
+            atmosphere = pymsis.calculate(
+                time_np, 
+                [config.lon], 
+                [config.lat], 
+                alt_km_list
+            )
+            
+            # Extract data for each altitude
+            for i, alt in enumerate(alt_list):
+                # Get species number densities (convert from m^-3 to match expected units)
+                he = atmosphere[0, 0, 0, i, pymsis.Variable.HE]  # He number density
+                o  = atmosphere[0, 0, 0, i, pymsis.Variable.O]   # O number density
+                n2 = atmosphere[0, 0, 0, i, pymsis.Variable.N2]  # N2 number density
+                o2 = atmosphere[0, 0, 0, i, pymsis.Variable.O2]  # O2 number density
+                ar = atmosphere[0, 0, 0, i, pymsis.Variable.AR]  # Ar number density
+                h_ = atmosphere[0, 0, 0, i, pymsis.Variable.H]   # H number density
+                n_ = atmosphere[0, 0, 0, i, pymsis.Variable.N]   # N number density
+                
+                # Get mass density and temperature
+                mass = atmosphere[0, 0, 0, i, pymsis.Variable.MASS_DENSITY]  # kg/m^3
+                texo = atmosphere[0, 0, 0, i, pymsis.Variable.TEMPERATURE]  # K (use same temp for both)
+                talt = atmosphere[0, 0, 0, i, pymsis.Variable.TEMPERATURE]  # K
+                
+                w.writerow([
+                    t.strftime('%Y-%m-%dT%H:%M:%S'), 
+                    config.lat, 
+                    config.lon, 
+                    alt, 
+                    he, o, n2, o2, ar, h_, n_, 
+                    mass, texo, talt
+                ])
+            
             t += timedelta(seconds=dt)
+    
+    print(f"Generated NRLMSIS atmospheric data with {len(alt_list)} altitudes")
 
 
 if __name__ == '__main__':
