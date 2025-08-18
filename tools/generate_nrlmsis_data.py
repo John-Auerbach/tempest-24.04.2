@@ -25,6 +25,12 @@ except Exception as e:
     print(f"ERROR: Failed to import pymsis: {e}")
     print("Cannot generate atmospheric data without real NRLMSIS library.")
 
+# Generate 100 altitudes from 100 km to 1000 km
+import numpy as np
+alt_range_km = np.linspace(100, 1000, 100)
+alt_range_m = alt_range_km * 1000  # Convert to meters
+alt_string = ','.join([f'{int(alt)}' for alt in alt_range_m])
+
 # Configuration parameters - modify these as needed
 DEFAULT_CONFIG = {
     'start': '2025-08-17T00:00:00',
@@ -32,7 +38,7 @@ DEFAULT_CONFIG = {
     'dt': '60',  # time step in seconds
     'lat': 0.0,  # latitude in degrees
     'lon': 0.0,  # longitude in degrees
-    'alts': '150000,200000,250000,300000,350000,400000,450000,500000,550000,600000',  # comma separated altitudes in meters
+    'alts': alt_string,  # 100 altitudes from 100km to 1000km
     'f107': 150.0,  # solar flux index
     'ap': 4.0,  # geomagnetic index
     'output': 'nrlmsis_output.csv'

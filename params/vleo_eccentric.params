@@ -52,7 +52,7 @@ Bare_Segments	= 100
 
 ###################################################################
 # Atmospheric model parameters
-PREFER_MSISE90 = No    # Use MSIS-86 model (default)
+PREFER_MSISE90 = Yes    # Dont use MSIS-86 model
 USE_NRLMSIS = Yes      # Use modern NRLMSIS atmospheric model
 NRLMSIS_DATAFILE = data/nrlmsis_output.csv  # Path to NRLMSIS data file
 
