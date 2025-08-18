@@ -3,8 +3,7 @@
 NRLMSIS CSV generator using pymsis library.
 Generates CSV rows: time_iso,lat,lon,alt_m,he,o,n2,o2,ar,h,n,mass,texo,talt
 
-This script uses the pymsis library to generate real atmospheric data.
-Modified to work without command line arguments - configure parameters below.
+This script uses the pymsis library to generate atmospheric data. configure parameters below.
 """
 import argparse
 from datetime import datetime, timedelta
@@ -25,20 +24,20 @@ except Exception as e:
     print(f"ERROR: Failed to import pymsis: {e}")
     print("Cannot generate atmospheric data without real NRLMSIS library.")
 
-# Generate 100 altitudes from 100 km to 1000 km
+# Generate more altitudes with higher resolution
 import numpy as np
-alt_range_km = np.linspace(100, 1000, 100)
+alt_range_km = np.linspace(0, 1000, 500)  # 1000 altitude points
 alt_range_m = alt_range_km * 1000  # Convert to meters
 alt_string = ','.join([f'{int(alt)}' for alt in alt_range_m])
 
 # Configuration parameters - modify these as needed
 DEFAULT_CONFIG = {
     'start': '2025-08-17T00:00:00',
-    'end': '2025-08-18T00:00:00', 
-    'dt': '60',  # time step in seconds
+    'end': '2025-08-18T00:00:00',  # 24 hours
+    'dt': '1800',  # 30 minute time step
     'lat': 0.0,  # latitude in degrees
     'lon': 0.0,  # longitude in degrees
-    'alts': alt_string,  # 100 altitudes from 100km to 1000km
+    'alts': alt_string,  # 1000 altitudes from 100km to 1000km
     'f107': 150.0,  # solar flux index
     'ap': 4.0,  # geomagnetic index
     'output': 'nrlmsis_output.csv'
@@ -112,8 +111,24 @@ def generate(config=None):
     alt_list = [float(x) for x in config.alts.split(',')]
     alt_km_list = [alt/1000.0 for alt in alt_list]  # Convert to km for pymsis
 
-    # Construct output path relative to tools directory
-    output_path = f"../data/{config.output}"
+    # Construct output path - handle both running from tools/ and tempest/ directories
+    import os
+    current_dir = os.getcwd()
+    
+    if current_dir.endswith('tools'):
+        # Running from tools directory
+        output_path = f"../data/{config.output}"
+    elif 'tempest' in current_dir:
+        # Running from tempest directory or subdirectory
+        output_path = f"data/{config.output}"
+    else:
+        # Fallback - use absolute path
+        output_path = f"/home/scien/tempest/data/{config.output}"
+    
+    print(f"Writing to: {os.path.abspath(output_path)}")
+    
+    # Create data directory if it doesn't exist
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     
     with open(output_path,'w',newline='') as f:
         w = csv.writer(f)
