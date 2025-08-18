@@ -229,9 +229,15 @@ if (show_debug && DEBUG_NEUTDENS)
          /* load table lazily */
          if (!nrl_table_loaded && strlen(nrlmsis_datafile) > 0) {
             load_nrl_csv (nrlmsis_datafile) ;
+            if (nrl_table_loaded) {
+               printf("DEBUG: NRLMSIS table loaded with %zu rows\n", nrl_table_len);
+            } else {
+               printf("DEBUG: Failed to load NRLMSIS table from %s\n", nrlmsis_datafile);
+            }
          }
          double epoch_seconds = (double) GMT_Secs (&curr_gmt) ;
          double outd[8], outt[2];
+         printf("DEBUG: Looking up NRLMSIS for alt=%.1f, epoch=%.1f\n", altitude, epoch_seconds);
          if (lookup_nrl_values (epoch_seconds, (double) sat_r_lla.Lat * R_D_CONST,
                                 (double) sat_r_lla.Long < 0 ? (double)(sat_r_lla.Long*R_D_CONST+360.0) : (double)(sat_r_lla.Long*R_D_CONST),
                                 sat_r_lla.Alt, outd, outt))
@@ -239,11 +245,13 @@ if (show_debug && DEBUG_NEUTDENS)
             for (int i=0;i<8;i++) dens_out[i] = (real) outd[i];
             temp_out[0] = (real) outt[0]; temp_out[1] = (real) outt[1];
             strcpy (neutdens_model, "NRLMSIS") ;
+            printf("DEBUG: Using NRLMSIS data\n");
          } else {
             gts6_ (&yyddd, &utsec, &altitude, &geod_lat, &geod_long, &loc_sol_time, 
                    &f107_3ma, &f107_d, daily_ap, &msis_mass,
                    dens_out, temp_out) ;
             strcpy (neutdens_model, neutdens_msise90) ;
+            printf("DEBUG: NRLMSIS lookup failed, using MSISE-90\n");
          }
       } else {
          gts6_ (&yyddd, &utsec, &altitude, &geod_lat, &geod_long, &loc_sol_time, 
@@ -253,13 +261,45 @@ if (show_debug && DEBUG_NEUTDENS)
       }
    }
    else if (altitude > 400.0)
-   {                                /* Need to use MSIS-86 (85 to 1000km)    */
-      gts5_ (data_path, 
-             &yyddd, &utsec, &altitude, &geod_lat, &geod_long, &loc_sol_time,
-             &f107_3ma, &f107_d, daily_ap, &msis_mass,
-             dens_out, temp_out,
-             data_path_len) ; 
-      strcpy (neutdens_model, neutdens_msis86) ;
+   {                                /* Need to use MSIS-86 (85 to 1000km) - but try NRLMSIS first */
+      if (use_nrlmsis) {
+         /* load table lazily */
+         if (!nrl_table_loaded && strlen(nrlmsis_datafile) > 0) {
+            load_nrl_csv (nrlmsis_datafile) ;
+            if (nrl_table_loaded) {
+               printf("DEBUG: NRLMSIS table loaded with %zu rows\n", nrl_table_len);
+            } else {
+               printf("DEBUG: Failed to load NRLMSIS table from %s\n", nrlmsis_datafile);
+            }
+         }
+         double epoch_seconds = (double) GMT_Secs (&curr_gmt) ;
+         double outd[8], outt[2];
+         printf("DEBUG: Looking up NRLMSIS for alt=%.1f, epoch=%.1f\n", altitude, epoch_seconds);
+         if (lookup_nrl_values (epoch_seconds, (double) sat_r_lla.Lat * R_D_CONST,
+                                (double) sat_r_lla.Long < 0 ? (double)(sat_r_lla.Long*R_D_CONST+360.0) : (double)(sat_r_lla.Long*R_D_CONST),
+                                sat_r_lla.Alt, outd, outt))
+         {
+            for (int i=0;i<8;i++) dens_out[i] = (real) outd[i];
+            temp_out[0] = (real) outt[0]; temp_out[1] = (real) outt[1];
+            strcpy (neutdens_model, "NRLMSIS") ;
+            printf("DEBUG: Using NRLMSIS data\n");
+         } else {
+            gts5_ (data_path, 
+                   &yyddd, &utsec, &altitude, &geod_lat, &geod_long, &loc_sol_time,
+                   &f107_3ma, &f107_d, daily_ap, &msis_mass,
+                   dens_out, temp_out,
+                   data_path_len) ; 
+            strcpy (neutdens_model, neutdens_msis86) ;
+            printf("DEBUG: NRLMSIS lookup failed, using MSIS-86\n");
+         }
+      } else {
+         gts5_ (data_path, 
+                &yyddd, &utsec, &altitude, &geod_lat, &geod_long, &loc_sol_time,
+                &f107_3ma, &f107_d, daily_ap, &msis_mass,
+                dens_out, temp_out,
+                data_path_len) ; 
+         strcpy (neutdens_model, neutdens_msis86) ;
+      }
    }
    else
    {

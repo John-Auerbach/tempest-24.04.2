@@ -9,19 +9,63 @@ import os
 def read_tempest_output(filename):
     print(f"reading tempest output from: {filename}")
     
-    data = np.loadtxt(filename, comments='#')
+    # Read file line by line to handle mixed data types
+    time_hours = []
+    altitude_km = []
+    perigee_km = []
+    apogee_km = []
+    atm_drag_n = []
+    atm_models = []
     
-    # extract columns
-    time_hours = data[:, 1]      # hours
-    altitude_km = data[:, 2]     # j2 corrected altitude
-    perigee_km = data[:, 4]      # perigee
-    apogee_km = data[:, 5]       # apogee
-    atm_drag_n = data[:, 10]     # atmospheric drag in newtons
+    with open(filename, 'r') as f:
+        for line in f:
+            line = line.strip()
+            # Skip comment lines
+            if line.startswith('#') or not line:
+                continue
+            
+            # Split the line into columns
+            cols = line.split()
+            
+            try:
+                # Extract numeric columns
+                time_hours.append(float(cols[1]))      # hours
+                altitude_km.append(float(cols[2]))     # j2 corrected altitude  
+                perigee_km.append(float(cols[4]))      # perigee
+                apogee_km.append(float(cols[5]))       # apogee
+                atm_drag_n.append(float(cols[10]))     # atmospheric drag in newtons
+                
+                # Extract atmospheric model if it exists (last column should be string)
+                if len(cols) > 11:
+                    atm_models.append(cols[-1])        # atmospheric model name
+                else:
+                    atm_models.append("Unknown")
+                    
+            except (ValueError, IndexError) as e:
+                print(f"Warning: skipping malformed line: {line}")
+                continue
+    
+    # Convert to numpy arrays for easier handling
+    time_hours = np.array(time_hours)
+    altitude_km = np.array(altitude_km)
+    perigee_km = np.array(perigee_km)
+    apogee_km = np.array(apogee_km)
+    atm_drag_n = np.array(atm_drag_n)
     
     print(f"loaded {len(time_hours)} data points")
     print(f"time range: {time_hours[0]:.3f} to {time_hours[-1]:.3f} hours")
     print(f"altitude range: {altitude_km.min():.1f} to {altitude_km.max():.1f} km")
     print(f"drag range: {atm_drag_n.min():.3f} to {atm_drag_n.max():.3f} N")
+    
+    if atm_models:
+        unique_models = list(set(atm_models))
+        print(f"atmospheric models used: {', '.join(unique_models)}")
+        
+        # Count how many times each model was used
+        for model in unique_models:
+            count = atm_models.count(model)
+            percentage = (count / len(atm_models)) * 100
+            print(f"  {model}: {count} points ({percentage:.1f}%)")
     
     return time_hours, altitude_km, perigee_km, apogee_km, atm_drag_n
 

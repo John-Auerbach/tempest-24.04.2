@@ -54,6 +54,7 @@ Bare_Segments	= 100
 # Atmospheric model parameters
 PREFER_MSISE90 = No    # Use MSIS-86 model (default)
 USE_NRLMSIS = Yes      # Use modern NRLMSIS atmospheric model
+NRLMSIS_DATAFILE = data/nrlmsis_vleo.csv  # Path to NRLMSIS data file
 
 # Drag Parameters
 SYSTEM_MASS = 200.0    # Total mass of tethered system (kg)
@@ -73,3 +74,4 @@ Show_Vars	= LONGITUDE
 Show_Vars	= ECCENTRICITY
 Show_Vars	= TRUE_ANOMALY
 Show_Vars	= ATM_DRAG
+Show_Vars	= MODEL_NEUTD
